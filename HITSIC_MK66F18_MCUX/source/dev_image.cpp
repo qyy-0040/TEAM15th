@@ -1,7 +1,13 @@
+/*
+ * dev_Image.cpp
+ *
+ *  Created on: 2020年11月10日
+ *      Author: fanyi
+ */
+/**TEAM 15th Dev**/
 #include "dev_Image.h"
 
 uint8_t* fullBuffer = NULL;
-
 int f[10 * CAMERA_H];//考察连通域联通性
 //每个白条子属性
 typedef struct {
@@ -418,4 +424,46 @@ void image_main()
     for (int i = NEAR_LINE; i >= FAR_LINE; i--)
         if (mid_line[i] != MISS)
             IMG[i][mid_line[i]] = red;
+}
+bool cam_test_status = true;
+void Cam_Test_Over(void)
+{
+    DISP_SSD1306_Fill(0);
+    cam_test_status = false;
+}
+void Cam_Test(void)
+{
+    cam_test_status = false;
+    while(cam_test_status)
+    {
+        while (kStatus_Success != DMADVP_TransferGetFullBuffer(DMADVP0, &dmadvpHandle, &fullBuffer));
+        dispBuffer->Clear();
+        for (int i = 0; i < cameraCfg.imageRow; i += 2)
+        {
+                int16_t imageRow = i >> 1;//除以2 为了加速;
+                int16_t dispRow = (imageRow / 8) + 1, dispShift = (imageRow % 8);
+                for (int j = 0; j < cameraCfg.imageCol; j += 2)
+                {
+                    int16_t dispCol = j >> 1;
+                    if (fullBuffer[i * cameraCfg.imageCol + j] > imageTH)
+                    {
+                        dispBuffer->SetPixelColor(dispCol, imageRow, 1);
+                    }
+                    if(dispCol == 188/4 || imageRow == 120/4)
+                    {
+                        dispBuffer->SetPixelColor(dispCol, imageRow, 0);
+                    }
+                }
+        }
+        DISP_SSD1306_BufferUpload((uint8_t*) dispBuffer);
+        DMADVP_TransferSubmitEmptyBuffer(DMADVP0, &dmadvpHandle, fullBuffer);
+        //PORT_SetPinInterruptConfig(PORTE, 10U, kPORT_InterruptLogicZero);
+        //extInt_t::insert(PORTE, 10U,Cam_Test_Over);
+    }
+}
+void Cam_Test_1(menu_keyOp_t *_op)
+{
+    MENU_Suspend();
+    //Cam_Test();
+    MENU_Resume();
 }

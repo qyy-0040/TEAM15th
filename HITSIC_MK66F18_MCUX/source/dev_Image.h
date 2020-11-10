@@ -1,8 +1,19 @@
 #ifndef _IMAGE_H
 #define _IMAGE_H
-#include <stdio.h>
-#include <stdlib.h>
-#include <math.h>
+#include "hitsic_common.h"
+#include "sys_extint.hpp"
+
+/** HITSIC_Module_DRV */
+#include "drv_disp_ssd1306.hpp"
+#include "drv_dmadvp.hpp"
+#include "drv_cam_zf9v034.hpp"
+#include "drv_cam_zf9v034_test.hpp"
+
+#include "cm_backtrace.h"
+#include "app_menu_def.hpp"
+#include "app_menu.hpp"
+
+
 
 #define MISS 255
 #define CAMERA_H  120                            //图片高度
@@ -26,7 +37,12 @@
 
 extern uint8_t IMG[CAMERA_H][CAMERA_W];//二值化后图像数组
 extern uint8_t image_Buffer_0[CAMERA_H][CAMERA_W];
-extern uint8_t* fullBuffer;//指向灰度图的首地址
+extern uint8_t* fullBuffer;
+extern uint32_t imageTH;//指向灰度图的首地址
+extern cam_zf9v034_configPacket_t cameraCfg;
+extern dmadvp_config_t dmadvpCfg;
+extern dmadvp_handle_t dmadvpHandle;
+extern disp_ssd1306_frameBuffer_t *dispBuffer;
 
 void head_clear(void);
 void THRE(void);
@@ -38,6 +54,8 @@ uint8_t find_continue(uint8_t i_start, uint8_t j_start);
 void ordinary_two_line(void);
 void image_main();
 void get_mid_line(void);
-
 void my_memset(uint8_t* ptr, uint8_t num, uint8_t size);
+void Cam_Test_Over(void);
+void Cam_Test(void);
+void Cam_Test_1(menu_keyOp_t *_op);
 #endif //

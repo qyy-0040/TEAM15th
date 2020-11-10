@@ -60,6 +60,9 @@
 #include "cm_backtrace.h"
 //#include "easyflash.h"
 
+/** HITSIC_Module_LIB */
+#include "lib_graphic.hpp"
+
 /** HITSIC_Module_APP */
 #include "app_menu.hpp"
 #include "app_svbmp.hpp"
@@ -84,50 +87,53 @@ FATFS fatfs;                                   //逻辑驱动器的工作区
 
 /**TEAM 15th Dev**/
 #include "dev_Image.h"
-
-void MENU_DataSetUp(void);
-
 cam_zf9v034_configPacket_t cameraCfg;
 dmadvp_config_t dmadvpCfg;
 dmadvp_handle_t dmadvpHandle;
+disp_ssd1306_frameBuffer_t *dispBuffer;
+void MENU_DataSetUp(void);
 void CAM_ZF9V034_DmaCallback(edma_handle_t *handle, void *userData, bool transferDone, uint32_t tcds);
 
 inv::i2cInterface_t imu_i2c(nullptr, IMU_INV_I2cRxBlocking, IMU_INV_I2cTxBlocking);
 inv::mpu6050_t imu_6050(imu_i2c);
 
+
+uint8_t *imageBuffer0 = new uint8_t[DMADVP0->imgSize];
+uint8_t *imageBuffer1 = new uint8_t[DMADVP0->imgSize];
+//graphic::bufPrint0608_t<disp_ssd1306_frameBuffer_t> bufPrinter(dispBuffer);
+
+
 void main(void)
 {
     /** 初始化阶段，关闭总中断 */
     HAL_EnterCritical();
-    /** 初始化时钟 */
+
+    /** BSP（板级支持包）初始化 */
     RTECLK_HsRun_180MHz();
-    /** 初始化引脚路由 */
     RTEPIN_Basic();
     RTEPIN_Digital();
     RTEPIN_Analog();
     RTEPIN_LPUART0_DBG();
     RTEPIN_UART0_WLAN();
-    /** 初始化外设 */
     RTEPIP_Basic();
     RTEPIP_Device();
-    /** 初始化调试串口 */
+
+    /** 初始化调试组件 */
     DbgConsole_Init(0U, 921600U, kSerialPort_Uart, CLOCK_GetFreq(kCLOCK_CoreSysClk));
     PRINTF("Welcome to HITSIC !\n");
     PRINTF("GCC %d.%d.%d\n", __GNUC__, __GNUC_MINOR__, __GNUC_PATCHLEVEL__);
-    /** 初始化CMBackTrace */
     cm_backtrace_init("HITSIC_MK66F18", "2020-v3.0", "v4.1.1");
-    /** 初始化ftfx_Flash */
-    FLASH_SimpleInit();
-    /** 初始化EasyFlash */
-    //easyflash_init();
-    /** 初始化PIT中断管理器 */
-    pitMgr_t::init();
-    /** 初始化I/O中断管理器 */
-    extInt_t::init();
+
     /** 初始化OLED屏幕 */
     DISP_SSD1306_Init();
     extern const uint8_t DISP_image_100thAnniversary[8][128];
     DISP_SSD1306_BufferUpload((uint8_t*) DISP_image_100thAnniversary);
+    /** 初始化ftfx_Flash */
+    FLASH_SimpleInit();
+    /** 初始化PIT中断管理器 */
+    pitMgr_t::init();
+    /** 初始化I/O中断管理器 */
+    extInt_t::init();
     /** 初始化菜单 */
     MENU_Init();
     MENU_Data_NvmReadRegionConfig();
@@ -135,70 +141,144 @@ void main(void)
     /** 菜单挂起 */
     MENU_Suspend();
     /** 初始化摄像头 */
-    //TODO: 在这里初始化摄像头
+    CAM_ZF9V034_GetDefaultConfig(&cameraCfg);                           //设置摄像头配置
+    CAM_ZF9V034_CfgWrite(&cameraCfg);                                   //写入配置
+    CAM_ZF9V034_GetReceiverConfig(&dmadvpCfg, &cameraCfg);    //生成对应接收器的配置数据，使用此数据初始化接受器并接收图像数据。
+    DMADVP_Init(DMADVP0, &dmadvpCfg);
+    DMADVP_TransferCreateHandle(&dmadvpHandle, DMADVP0, CAM_ZF9V034_UnitTestDmaCallback);
+    DMADVP_TransferSubmitEmptyBuffer(DMADVP0, &dmadvpHandle, imageBuffer0);
+    DMADVP_TransferSubmitEmptyBuffer(DMADVP0, &dmadvpHandle, imageBuffer1);
+    DMADVP_TransferStart(DMADVP0, &dmadvpHandle);
     /** 初始化IMU */
     //TODO: 在这里初始化IMU（MPU6050）
     /** 菜单就绪 */
-    //MENU_Resume();
+    MENU_Resume();
     /** 控制环初始化 */
     //TODO: 在这里初始化控制环
     /** 初始化结束，开启总中断 */
     HAL_ExitCritical();
-    //摄像头初始化：
-    cam_zf9v034_configPacket_t cameraCfg;
-    CAM_ZF9V034_GetDefaultConfig(&cameraCfg);                           //设置摄像头配置
-    CAM_ZF9V034_CfgWrite(&cameraCfg);                                   //写入配置
-    dmadvp_config_t dmadvpCfg;
-    CAM_ZF9V034_GetReceiverConfig(&dmadvpCfg, &cameraCfg);    //生成对应接收器的配置数据，使用此数据初始化接受器并接收图像数据。
-    DMADVP_Init(DMADVP0, &dmadvpCfg);
-    dmadvp_handle_t dmadvpHandle;
-    DMADVP_TransferCreateHandle(&dmadvpHandle, DMADVP0, CAM_ZF9V034_UnitTestDmaCallback);
-    uint8_t *imageBuffer0 = new uint8_t[DMADVP0->imgSize];
-    uint8_t *imageBuffer1 = new uint8_t[DMADVP0->imgSize];
-    disp_ssd1306_frameBuffer_t *dispBuffer = new disp_ssd1306_frameBuffer_t;
-    DMADVP_TransferSubmitEmptyBuffer(DMADVP0, &dmadvpHandle, imageBuffer0);
-    DMADVP_TransferSubmitEmptyBuffer(DMADVP0, &dmadvpHandle, imageBuffer1);
-    DMADVP_TransferStart(DMADVP0, &dmadvpHandle);
     float f = arm_sin_f32(0.6f);
-    while(true)
-    {
-        while (kStatus_Success != DMADVP_TransferGetFullBuffer(DMADVP0, &dmadvpHandle, &fullBuffer));
-        dispBuffer->Clear();
-        const uint8_t imageTH = 130;
-        for (int i = 0; i < cameraCfg.imageRow; i += 2)
-        {
-            int16_t imageRow = i >> 1;//除以2 为了加速;
-            int16_t dispRow = (imageRow / 8) + 1, dispShift = (imageRow % 8);
-            for (int j = 0; j < cameraCfg.imageCol; j += 2)
-            {
-                int16_t dispCol = j >> 1;
-                if (fullBuffer[i * cameraCfg.imageCol + j] > imageTH)
-                {
-                    dispBuffer->SetPixelColor(dispCol, imageRow, 1);
-                }
-            }
-        }
 
-        DISP_SSD1306_BufferUpload((uint8_t*) dispBuffer);
-        DMADVP_TransferSubmitEmptyBuffer(DMADVP0, &dmadvpHandle, fullBuffer);
-
-    }
-
-    while (true)
-    {
-        //TODO: 在这里添加车模保护代码
-    }
 }
-
+int32_t testInt1 = 19981214;
+int32_t testInt2 = 19981214;
+int32_t testInt3 = 19981214;
+float testFlt = 3.1415926f;
+uint32_t imageTH = 130;
 void MENU_DataSetUp(void)
 {
-    MENU_ListInsert(menu_menuRoot, MENU_ItemConstruct(nullType, NULL, "EXAMPLE", 0, 0));
-    //TODO: 在这里添加子菜单和菜单项
+    menu_list_t *myList_1;
+    menu_list_t *myList_2;
+    MENU_ListInsert(menu_menuRoot, MENU_ItemConstruct(nullType, NULL, "", 0, 0));
+
+    /** 子菜单指针初始化 */
+    myList_1 = MENU_ListConstruct(
+            "Para_Ctrl",     ///> 菜单标题，在菜单列表中的第一行显示，最大12字符。
+            10,             ///> 菜单列表的大小，须预留1位用于返回上一级的[back]。
+            menu_menuRoot   ///> 该菜单的上级菜单指针。注意：该指针仅用于返回上级菜单，并不会将子菜单插入上级菜单。
+        );
+    /** 检查内存分配是否成功 */
+        assert(myList_1);
+    /** 将子菜单的跳转入口插入其上级菜单 */
+        MENU_ListInsert(
+            menu_menuRoot,  ///> 要插入的上级菜单。
+            MENU_ItemConstruct(
+            menuType,   ///> 类型标识，指明这是一个菜单跳转类型的菜单项。
+            myList_1,   ///> 数据指针，这里指向要跳转到的菜单列表。
+            "Para_Ctrl", ///> 菜单项名称，在菜单列表中显示。
+            0,          ///> 数据的保存位置，对于非数据类型填0即可。
+            0           ///> 属性Flag，无任何属性填0。
+        ));
+        {   //这里加这组括号只是为了缩进方便，其内部的语句用于向myList_1插入菜单项。
+            MENU_ListInsert(myList_1, MENU_ItemConstruct(
+                variType,  ///> 类型标识，指明这是一个整数类型的菜单项
+                &testInt1,  ///> 数据指针，这里指向要操作的整数。必须是int32_t类型。
+                "Motor_L",   ///> 菜单项名称，在菜单列表中显示。
+                10,        ///> 数据的保存地址，不能重复且尽可能连续，步长为1。
+                           ///> 全局数据区0~9的地址为保留地址，不能使用。
+                menuItem_data_global
+                           ///> 属性flag。此flag表示该变量存储于全局数据区
+            ));
+            MENU_ListInsert(myList_1, MENU_ItemConstruct(
+                    variType,  ///> 类型标识，指明这是一个整数类型的菜单项
+                    &testInt2,  ///> 数据指针，这里指向要操作的整数。必须是int32_t类型。
+                    "Motor_L",   ///> 菜单项名称，在菜单列表中显示。
+                    11,        ///> 数据的保存地址，不能重复且尽可能连续，步长为1。
+                                ///> 全局数据区0~9的地址为保留地址，不能使用。
+                    menuItem_data_global
+                                ///> 属性flag。此flag表示该变量存储于全局数据区.
+            ));
+            MENU_ListInsert(myList_1, MENU_ItemConstruct(
+                    variType,  ///> 类型标识，指明这是一个整数类型的菜单项
+                    &testInt3,  ///> 数据指针，这里指向要操作的整数。必须是int32_t类型。
+                    "Motor_LR",   ///> 菜单项名称，在菜单列表中显示。
+                    12,        ///> 数据的保存地址，不能重复且尽可能连续，步长为1。
+                    ///> 全局数据区0~9的地址为保留地址，不能使用。
+                    menuItem_data_global
+                    ///> 属性flag。此flag表示该变量存储于全局数据区.
+            ));
+        }
+        myList_2 = MENU_ListConstruct(
+                    "Cam_Test",     ///> 菜单标题，在菜单列表中的第一行显示，最大12字符。
+                    10,             ///> 菜单列表的大小，须预留1位用于返回上一级的[back]。
+                    menu_menuRoot   ///> 该菜单的上级菜单指针。注意：该指针仅用于返回上级菜单，并不会将子菜单插入上级菜单。
+                );
+        /** 检查内存分配是否成功 */
+        assert(myList_2);
+        /** 将子菜单的跳转入口插入其上级菜单 */
+        MENU_ListInsert(
+                menu_menuRoot,  ///> 要插入的上级菜单。
+                MENU_ItemConstruct(
+                        menuType,   ///> 类型标识，指明这是一个菜单跳转类型的菜单项。
+                        myList_2,   ///> 数据指针，这里指向要跳转到的菜单列表。
+                        "Cam_Test", ///> 菜单项名称，在菜单列表中显示。
+                        0,          ///> 数据的保存位置，对于非数据类型填0即可。
+                        0           ///> 属性Flag，无任何属性填0。
+                ));
+        {
+            MENU_ListInsert(myList_2, MENU_ItemConstruct(
+                    variType,  ///> 类型标识，指明这是一个整数类型的菜单项
+                    &imageTH,  ///> 数据指针，这里指向要操作的整数。必须是int32_t类型。
+                    "Image_TH",   ///> 菜单项名称，在菜单列表中显示。
+                    13,        ///> 数据的保存地址，不能重复且尽可能连续，步长为1。
+                    ///> 全局数据区0~9的地址为保留地址，不能使用。
+                    menuItem_data_global
+                    ///> 属性flag。此flag表示该变量存储于全局数据区.
+                        ));
+            MENU_ListInsert(myList_2, MENU_ItemConstruct(
+                    procType,  ///> 类型标识，指明这是一个浮点类型的菜单项
+                    Cam_Test_1,///> 数据指针，这里指向要操作的整数。必须是float类型。
+                    "Cam_Test", ///> 菜单项名称，在菜单列表中显示。
+                    0,         ///> 数据的保存地址，不能重复且尽可能连续，步长为1。
+                    menuItem_proc_uiDisplay|menuItem_proc_runOnce
+                    ///> 属性flag。此flag表示该该程序运行一次就退出。
+                    ));
+        }
+
 }
 
 void CAM_ZF9V034_DmaCallback(edma_handle_t *handle, void *userData, bool transferDone, uint32_t tcds)
 {
-    //TODO: 补完本回调函数
+    //TODO: 补完本回调函数，双缓存采图。
 
     //TODO: 添加图像处理（转向控制也可以写在这里）
 }
+
+/**
+ * 『灯千结的碎碎念』 Tips by C.M. :
+ * 1. 浮点数计算有时（例如除零时）会产生“nan”，即“非数（Not-a-Number）”。
+ *      要检测一个变量是否为“nan”，只需判断这个变量是否和自身相等。如果该
+ *      变量与自身不相等（表达式“var == var”的值为假），则可判定该浮点数
+ *      的值是nan，需要进行车模保护动作。
+ * 2. 由于车模震动等因素，IMU可能会断开连接。一旦发现IMU读取失败，应执行车
+ *      模保护动作。另外，IMU在单片机复位的瞬间可能正在进行传输，导致时序
+ *      紊乱，初始化失败。因此装有IMU的车模复位时必须全车断电。
+ * 3. 正常情况下图像帧率为50FPS，即20ms一帧。若摄像头时序紊乱，会导致控制周
+ *      期混乱。因而有必要在每次图像采集完成时测量距离上次图像采集完成的时
+ *      间间隔，如果明显偏离20ms，须执行车模保护动作。
+ * 4. 直立车需特别注意：有时控制输出会使两个电机向相反方向旋转，这在正常运行
+ *      中是十分危险的，可能造成车模进入“原地陀螺旋转”的状态，极易损坏车模或
+ *      导致人员受伤。在设置电机占空比时务必做好异常保护。
+ */
+
+
