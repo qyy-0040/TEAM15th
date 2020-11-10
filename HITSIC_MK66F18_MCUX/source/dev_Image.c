@@ -1,5 +1,6 @@
 #include "dev_Image.h"
-#include "drv_disp_ssd1306.hpp"
+
+uint8_t* fullBuffer = NULL;
 
 int f[10 * CAMERA_H];//考察连通域联通性
 //每个白条子属性
@@ -43,42 +44,42 @@ uint8_t threshold = 160;//阈值
 //输出：二值化图片
 //备注：
 ///////////////////////////////////////////
-void THRE(disp_ssd1306_frameBuffer_t* dispBuffer, const uint8_t imageTH)
+void THRE()
 {
     uint8_t* map;
     uint8_t* my_map;
-    for (int i = 0; i < CAMERA_H; i += 2)
+    map = fullBuffer;
+    for (int i = 0; i < 120; i++)
     {
-        int16_t imageRow = i >> 1;//除以2 为了加速;
-        int16_t dispRow = (imageRow / 8) + 1, dispShift = (imageRow % 8);
-        for (int j = 0; j < CAMERA_W; j += 2)
+        my_map = &IMG[i][0];
+        for (int j = 0; j < 188; j++)
         {
-            int16_t dispCol = j >> 1;
-            if (fullBuffer[i * CAMERA_W + j] > imageTH)
-            {
-                dispBuffer->SetPixelColor(dispCol, imageRow, 1);
-            }
+            if ((*map) > threshold)
+                (*my_map) = 1;
+            else (*my_map) = 0;
+            map++;
+            my_map++;
         }
     }
 }
 
 ////////////////////////////////////////////
 //功能：粗犷的清车头
-//输入：dispBuffer
-//输出：my_map
+//输入：
+//输出：
 //备注：要根据自己车头的大小进行修改
 ///////////////////////////////////////////
-void head_clear(disp_ssd1306_frameBuffer_t* dispBuffer)
+void head_clear(void)
 {
+    uint8_t* my_map;
     for (int i = 119; i >= 84; i--)
     {
+        my_map = &IMG[i][0];
         for (int j = 40; j <= 135; j++)
         {
-            dispBuffer->frame[i][j] = white;
-
+            *(my_map+j) = white;
         }
     }
-    return;
 }
 
 ////////////////////////////////////////////
@@ -96,11 +97,11 @@ int find_f(int node)
 
 ////////////////////////////////////////////
 //功能：提取跳变沿 并对全部白条子标号
-//输入： dispBuffer
+//输入：IMG[120][188]
 //输出：white_range[120]
 //备注：指针提速
 ///////////////////////////////////////////
-void search_white_range(disp_ssd1306_frameBuffer_t* dispBuffer)
+void search_white_range()
 {
     uint8_t i, j;
     int istart = NEAR_LINE;//处理起始行
@@ -110,7 +111,7 @@ void search_white_range(disp_ssd1306_frameBuffer_t* dispBuffer)
     uint8_t* map = NULL;
     for (i = istart; i >= iend; i--)
     {
-        map = dispBuffer->frame[i][LEFT_SIDE];//指针行走加快访问速度
+        map = &IMG[i][LEFT_SIDE];//指针行走加快访问速度
         tnum = 0;
         for (j = LEFT_SIDE; j <= RIGHT_SIDE; j++, map++)
         {
@@ -144,7 +145,7 @@ void search_white_range(disp_ssd1306_frameBuffer_t* dispBuffer)
 //输出：
 //备注：
 ///////////////////////////////////////////
-void find_all_connect()//查找连通域
+void find_all_connect()
 {
     //f数组初始化
     for (int i = 1; i <= all_connect_num; i++)
@@ -197,7 +198,7 @@ void find_road()
 {
     uint8_t istart = NEAR_LINE;
     uint8_t iend = FAR_LINE;
-    top_road = NEAR_LINE;//赛道最高处所在行数，先初始化为最低处
+    top_road = NEAR_LINE;//赛道最高处所在行数，先初始化话为最低处
     int road_f = -1;//赛道所在连通域父节点编号，先初始化为-1，以判断是否找到赛道
     int while_range_num = 0, roud_while_range_num = 0;
     all_range* twhite_range = NULL;
@@ -388,7 +389,7 @@ void my_memset(uint8_t* ptr, uint8_t num, uint8_t size)
 void get_mid_line(void)
 {
     my_memset(mid_line, MISS, CAMERA_H);
-    for (int i = NEAR_LINE; i >= FAR_LINE; i--)
+    for(int i = NEAR_LINE;i >= FAR_LINE;i--)
         if (left_line[i] != MISS)
         {
             mid_line[i] = (left_line[i] + right_line[i]) / 2;
@@ -401,14 +402,13 @@ void get_mid_line(void)
 }
 ////////////////////////////////////////////
 //功能：图像处理主程序
-//输入：dispBuffer
+//输入：
 //输出：
 //备注：
 ///////////////////////////////////////////
-void Image(disp_ssd1306_frameBuffer_t* dispBuffer)
+void image_main()
 {
-    head_clear(dispBuffer);
-    search_white_range(dispBuffer);
+    search_white_range();
     find_all_connect();
     find_road();
     /*到此处为止，我们已经得到了属于赛道的结构体数组my_road[CAMERA_H]*/
@@ -417,5 +417,5 @@ void Image(disp_ssd1306_frameBuffer_t* dispBuffer)
 
     for (int i = NEAR_LINE; i >= FAR_LINE; i--)
         if (mid_line[i] != MISS)
-            dispBuffer->frame[i][mid_line[i]] = black;
+            IMG[i][mid_line[i]] = red;
 }
