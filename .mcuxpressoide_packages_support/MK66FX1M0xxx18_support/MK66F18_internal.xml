@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE infoList
+  SYSTEM "crt_infolist.dtd">
+<infoList vendor="NXP">
+   <info name="MK66FX1M0xxx18" chip="MK66FX1M0xxx18">
+      <chip>
+         <name>MK66FX1M0xxx18</name>
+         <family>K6x</family>
+         <vendor>NXP</vendor>
+         <memory id="Flash" type="Flash" size="1024" is_ro="true" can_program="true"/>
+         <memory id="RAM" type="RAM" size="256"/>
+         <memoryInstance id="PROGRAM_FLASH" derived_from="Flash" location="0x00000000" size="0x00100000"
+                         driver="FTFE_4K.cfx"/>
+         <memoryInstance id="SRAM_UPPER" derived_from="RAM" location="0x20000000" size="0x00030000"/>
+         <memoryInstance id="SRAM_LOWER" derived_from="RAM" location="0x1fff0000" size="0x00010000"/>
+         <memoryInstance id="FLEX_RAM" derived_from="RAM" location="0x14000000" size="0x00001000"/>
+      </chip>
+      <processor>
+         <name gcc_name="cortex-m4">Cortex-M4</name>
+         <family>Cortex-M</family>
+      </processor>
+   </info>
+</infoList>

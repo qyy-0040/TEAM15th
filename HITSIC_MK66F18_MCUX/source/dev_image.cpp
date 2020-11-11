@@ -6,8 +6,12 @@
  */
 /**TEAM 15th Dev**/
 #include "dev_Image.h"
-
-uint8_t* fullBuffer = NULL;
+uint8_t *imageBuffer0 = new uint8_t[DMADVP0->imgSize];
+uint8_t *imageBuffer1 = new uint8_t[DMADVP0->imgSize];
+uint8_t *fullBuffer = NULL;
+cam_zf9v034_configPacket_t cameraCfg;
+dmadvp_config_t dmadvpCfg;
+dmadvp_handle_t dmadvpHandle;
 int f[10 * CAMERA_H];//考察连通域联通性
 //每个白条子属性
 typedef struct {
@@ -43,6 +47,18 @@ uint8_t mid_line[CAMERA_H];
 int all_connect_num = 0;//所有白条子数
 uint8_t top_road;//赛道最高处所在行数
 uint8_t threshold = 160;//阈值
+
+/////////////////////////////
+//新加变量
+uint8_t left_cross[CAMERA_H];   //十字路口的左边界
+uint8_t right_cross[CAMERA_H];  //十字路口的右边界
+uint8_t cross[CAMERA_H] = { -1 };       //十字路口所在行
+uint8_t cross_left[2] = { 0,119 };                  //十字路口左右两边的上下边界所在列数
+uint8_t cross_right[2] = { 0,119 };             //考虑到特殊情况 上边界设置为0 下边界设置为119
+uint8_t ols_leftXi[CAMERA_H];
+uint8_t ols_leftYi[CAMERA_H] = { 0 };
+uint8_t ols_rightXi[CAMERA_H];
+uint8_t ols_rightYi[CAMERA_H] = { 0 };
 
 ////////////////////////////////////////////
 //功能：二值化
@@ -433,37 +449,218 @@ void Cam_Test_Over(void)
 }
 void Cam_Test(void)
 {
-    cam_test_status = false;
-    while(cam_test_status)
+    MENU_Suspend();
+    //初始化部分：
+    cam_zf9v034_configPacket_t cameraCfg;
+    CAM_ZF9V034_GetDefaultConfig(&cameraCfg);                                   //设置摄像头配置
+    CAM_ZF9V034_CfgWrite(&cameraCfg);                                   //写入配置
+    dmadvp_config_t dmadvpCfg;
+    CAM_ZF9V034_GetReceiverConfig(&dmadvpCfg, &cameraCfg);    //生成对应接收器的配置数据，使用此数据初始化接受器并接收图像数据。
+    DMADVP_Init(DMADVP0, &dmadvpCfg);
+    dmadvp_handle_t dmadvpHandle;
+    DMADVP_TransferCreateHandle(&dmadvpHandle, DMADVP0, CAM_ZF9V034_UnitTestDmaCallback);
+    uint8_t *imageBuffer0 = new uint8_t[DMADVP0->imgSize];
+    uint8_t *imageBuffer1 = new uint8_t[DMADVP0->imgSize];
+    uint8_t *fullBuffer = NULL;
+    disp_ssd1306_frameBuffer_t *dispBuffer = new disp_ssd1306_frameBuffer_t;
+    DMADVP_TransferSubmitEmptyBuffer(DMADVP0, &dmadvpHandle, imageBuffer0);
+    DMADVP_TransferSubmitEmptyBuffer(DMADVP0, &dmadvpHandle, imageBuffer1);
+    DMADVP_TransferStart(DMADVP0, &dmadvpHandle);
+
+
+    while(true)
     {
+
         while (kStatus_Success != DMADVP_TransferGetFullBuffer(DMADVP0, &dmadvpHandle, &fullBuffer));
         dispBuffer->Clear();
+        const uint8_t imageTH = 100;
         for (int i = 0; i < cameraCfg.imageRow; i += 2)
         {
-                int16_t imageRow = i >> 1;//除以2 为了加速;
-                int16_t dispRow = (imageRow / 8) + 1, dispShift = (imageRow % 8);
-                for (int j = 0; j < cameraCfg.imageCol; j += 2)
+            int16_t imageRow = i >> 1;//除以2 为了加速;
+            int16_t dispRow = (imageRow / 8) + 1, dispShift = (imageRow % 8);
+            for (int j = 0; j < cameraCfg.imageCol; j += 2)
+            {
+                int16_t dispCol = j >> 1;
+                if (fullBuffer[i * cameraCfg.imageCol + j] > imageTH)
                 {
-                    int16_t dispCol = j >> 1;
-                    if (fullBuffer[i * cameraCfg.imageCol + j] > imageTH)
-                    {
-                        dispBuffer->SetPixelColor(dispCol, imageRow, 1);
-                    }
-                    if(dispCol == 188/4 || imageRow == 120/4)
-                    {
-                        dispBuffer->SetPixelColor(dispCol, imageRow, 0);
-                    }
+                    dispBuffer->SetPixelColor(dispCol, imageRow, 1);
                 }
+            }
         }
         DISP_SSD1306_BufferUpload((uint8_t*) dispBuffer);
         DMADVP_TransferSubmitEmptyBuffer(DMADVP0, &dmadvpHandle, fullBuffer);
         //PORT_SetPinInterruptConfig(PORTE, 10U, kPORT_InterruptLogicZero);
         //extInt_t::insert(PORTE, 10U,Cam_Test_Over);
+        MENU_Resume();
     }
 }
 void Cam_Test_1(menu_keyOp_t *_op)
 {
-    MENU_Suspend();
-    //Cam_Test();
-    MENU_Resume();
+
+}
+void Cam_Init(void)
+{
+
+}
+
+////////////////////////////////////////////
+//新增函数
+
+void check()
+{
+    printf("cross_left:%d %d\n", cross_left[0], cross_left[1]);
+    printf("cross_right:%d %d\n", cross_right[0], cross_right[1]);
+    printf("left_line:\n");
+    for (int i = FAR_LINE; i <= NEAR_LINE; i++) {
+        printf(" %d\t",  left_line[i]);
+        if (i % 10 == 0)printf("\n");
+    }
+    printf("right_line:\n");
+    for (int i = FAR_LINE; i <= NEAR_LINE; i++) {
+        printf(" %d\t",  right_line[i]);
+        if (i % 10 == 0)printf("\n");
+    }
+}
+///////////////////////////////////////////////////////////////////////////
+//十字路口左边界
+//输入
+//输出
+//
+///////////////////////////////////////////////////////////////////////////
+int find_crossLeft() {
+    int schange = 0;//是否存在突变
+    for (int i = 3; i <CAMERA_H ; i++) {
+
+        //对于左边界来说 数值突然变大 十字路口下端 突然变小 十字路口上端
+        if ((left_line[i] - left_line[i - 1] > 3) && (left_line[i] - left_line[i - 2] > 3 )&& (left_line[i] - left_line[i - 3] > 3))
+        {
+            schange = 1;
+            cross_left[1] = i;
+        }
+        if ((left_line[i] - left_line[i - 1] < -3) && (left_line[i] - left_line[i - 2] < -3) && (left_line[i] - left_line[i - 3] < -3))
+        {
+            schange = 1;
+            cross_left[0] = i;
+        }
+    }
+    //如果下边界比上边界小，令下边界为119
+    if (cross_left[1] < cross_left[0]) cross_left[1] = 119;
+    if (schange == 1)       return 1;//存在突变
+    if (schange == 0)   return 0;   //nope
+    /// //
+
+
+}
+
+///////////////////////////////////////////////////////////////////////////
+//十字路口右边界
+//输入
+//输出
+//
+///////////////////////////////////////////////////////////////////////////
+int find_crossRight() {
+    int schange = 0;//是否存在突变
+    for (int i = 3; i < CAMERA_H; i++) {
+
+        //对于右边界来说 数值突然变大 十字路口上端 突然变小 十字路口下端
+        if (right_line[i] - right_line[i - 1] > 5 && right_line[i] - right_line[i - 2] > 5 && right_line[i] - right_line[i - 3] > 5)
+        {
+            schange = 1;
+            cross_right[0] = i;
+        }
+        if (right_line[i] - right_line[i - 1] < -5 && right_line[i] - right_line[i - 2] < -5 && right_line[i] - right_line[i - 3] < -5)
+        {
+            schange = 1;
+            cross_right[1] = i;
+        }
+    }
+    //如果下边界比上边界小，令下边界为119
+    if (cross_right[1] < cross_right[0]) cross_right[1] = 119;
+    if (schange == 1)       return 1;//存在突变
+    if (schange == 0)   return 0;   //nope
+}
+
+///////////////////////////////////////////////////////
+//生成最小二乘法的参考数组xi yi 以及需要拟合的数组cross[CAMERA_H]
+//输入 (为了左右两边不用写两个函数，range为cross_left[2]/cross_right[2]；side 为 left_line/right_side
+//输出
+//
+///////////////////////////////////////////////////////
+void ols_generateData(uint8_t range[], uint8_t side[], uint8_t xi[], uint8_t yi[])
+{
+    //为了之后方便判断数组长度，先将xi yi 全部初始化为-1
+    for (int i = 0; i < CAMERA_H; i++) {
+        xi[i] = -1;
+    }
+    for (int i = 0; i < CAMERA_H; i++) {
+        yi[i] = -1;
+    }
+    int j = 0;//xi的第j个元素
+    //初始化xi xi的存放的数值是行数
+    for (int i = range[0] - 20; i < range[0] - 5; i++) {
+        if (i >= 0) {
+            xi[j] = i;
+            j++;
+        }
+    }
+    for (int i = range[1] + 7; i < range[i] + 30; i++)
+    {
+        if (i <= 119) {
+            xi[j] = i;
+            j++;
+        }
+    }
+    //初始化yi yi是xi对应位置当中那一行边界值所在列数
+    for (int i = 0; xi[i] >= 0 && i <= 119; i++) {
+        yi[i] = side[xi[i]];
+    }
+    return;
+}
+
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//最小二乘法的函数实现
+//输入：已知的 xi(ols_leftXi,ols_rightXi)  ;yi(ols_leftYi,ols_rightYi),
+//      range 即cross_left[2]/cross_right[2],    line 即 left_line/right_line
+//输出：
+//
+////////////////////////////////////////////////////////////////////////////////////////////////////////////
+void ols_fitImg(uint8_t range[], uint8_t side[], uint8_t xi[], uint8_t yi[])
+{
+    int midvar1 = 0;
+    int midvar2 = 0;//两个没有感情的中间变量
+    float k;
+    //k
+    for (int i = 0; xi[i] != -1 && i <= 119; i++) { //求出曲线斜率
+        midvar1 += 2 * xi[i] * yi[i];
+        midvar2 += xi[i] * xi[i];
+    }
+    k = (float)midvar1 / (float)midvar2;
+    //renew side
+    for (int i = range[0]; i < range[1]; i++) { //拟合边界值
+        side[i] = (int)(k * i);
+    }
+    return;
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+//功能：检测到十字路口开始拟合赛道
+//输入：
+//输出：
+//
+/////////////////////////////////////////////////////////////////////////////////
+void ols_road()
+{
+    int flag1 = find_crossLeft();
+    int flag2 = find_crossRight();
+    if (flag1 == 1 && flag2 == 1) {//检测到十字路口 开始拟合赛道
+        ols_generateData(cross_left, left_line, ols_leftXi, ols_leftYi);
+        ols_generateData(cross_right, right_line, ols_rightXi, ols_rightYi);
+        ols_fitImg(cross_left, left_line, ols_leftXi, ols_leftYi);
+        ols_fitImg(cross_right, right_line, ols_rightXi, ols_rightYi);
+
+    }
+
+
+    return;
 }

@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<chips chipVendor="NXP" family="K6x" vendorURL="http://www.nxp.com" chipURL="">
+   <chip name="MK66FN2M0xxx18" xml_file="MK66F18_internal.xml" chipURL=""/>
+</chips>
