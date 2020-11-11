@@ -24,25 +24,11 @@
 #define RIGHT_SIDE 187//图像处理右边界
 #define MISS 255
 #define white_num_MAX 10//每行最多允许白条数
-
-/////////////////////////////
-#define black 0
-#define white 1
-#define blue  2
-#define green 3
-#define red   4
-#define gray  5
-#define purple 6
-///////////////////////////
+#define MIDLINE 94
 
 extern uint8_t IMG[CAMERA_H][CAMERA_W];//二值化后图像数组
 extern uint8_t image_Buffer_0[CAMERA_H][CAMERA_W];
-extern uint8_t* fullBuffer;
 extern uint32_t imageTH;//指向灰度图的首地址
-extern cam_zf9v034_configPacket_t cameraCfg;
-extern dmadvp_config_t dmadvpCfg;
-extern dmadvp_handle_t dmadvpHandle;
-extern disp_ssd1306_frameBuffer_t *dispBuffer;
 
 void head_clear(void);
 void THRE(void);
@@ -55,7 +41,6 @@ void ordinary_two_line(void);
 void image_main();
 void get_mid_line(void);
 void my_memset(uint8_t* ptr, uint8_t num, uint8_t size);
-void Cam_Test_Over(void);
-void Cam_Test(void);
-void Cam_Test_1(menu_keyOp_t *_op);
+void Cam_Test(menu_keyOp_t *_op);
+void Update_Servo_Error(menu_keyOp_t *_op);
 #endif //

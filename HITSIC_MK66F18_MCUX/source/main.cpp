@@ -87,21 +87,24 @@ FATFS fatfs;                                   //逻辑驱动器的工作区
 
 /**TEAM 15th Dev**/
 #include "dev_Image.h"
-cam_zf9v034_configPacket_t cameraCfg;
-dmadvp_config_t dmadvpCfg;
-dmadvp_handle_t dmadvpHandle;
-disp_ssd1306_frameBuffer_t *dispBuffer;
+#include "dev_drive.h"
+
 void MENU_DataSetUp(void);
 void CAM_ZF9V034_DmaCallback(edma_handle_t *handle, void *userData, bool transferDone, uint32_t tcds);
 
 inv::i2cInterface_t imu_i2c(nullptr, IMU_INV_I2cRxBlocking, IMU_INV_I2cTxBlocking);
 inv::mpu6050_t imu_6050(imu_i2c);
 
-
-uint8_t *imageBuffer0 = new uint8_t[DMADVP0->imgSize];
-uint8_t *imageBuffer1 = new uint8_t[DMADVP0->imgSize];
-//graphic::bufPrint0608_t<disp_ssd1306_frameBuffer_t> bufPrinter(dispBuffer);
-
+disp_ssd1306_frameBuffer_t dispBuffer;
+graphic::bufPrint0608_t<disp_ssd1306_frameBuffer_t> bufPrinter(dispBuffer);
+extern float Motor_L;
+extern float Motor_R;
+extern float Servo;
+extern float Servo_kp;
+extern float Servo_kd;
+extern float Servo_ki;
+extern uint32_t threshold;
+extern uint32_t preview;
 
 void main(void)
 {
@@ -128,6 +131,7 @@ void main(void)
     DISP_SSD1306_Init();
     extern const uint8_t DISP_image_100thAnniversary[8][128];
     DISP_SSD1306_BufferUpload((uint8_t*) DISP_image_100thAnniversary);
+    DISP_SSD1306_delay_ms(1000);
     /** 初始化ftfx_Flash */
     FLASH_SimpleInit();
     /** 初始化PIT中断管理器 */
@@ -141,30 +145,21 @@ void main(void)
     /** 菜单挂起 */
     MENU_Suspend();
     /** 初始化摄像头 */
-    CAM_ZF9V034_GetDefaultConfig(&cameraCfg);                           //设置摄像头配置
-    CAM_ZF9V034_CfgWrite(&cameraCfg);                                   //写入配置
-    CAM_ZF9V034_GetReceiverConfig(&dmadvpCfg, &cameraCfg);    //生成对应接收器的配置数据，使用此数据初始化接受器并接收图像数据。
-    DMADVP_Init(DMADVP0, &dmadvpCfg);
-    DMADVP_TransferCreateHandle(&dmadvpHandle, DMADVP0, CAM_ZF9V034_UnitTestDmaCallback);
-    DMADVP_TransferSubmitEmptyBuffer(DMADVP0, &dmadvpHandle, imageBuffer0);
-    DMADVP_TransferSubmitEmptyBuffer(DMADVP0, &dmadvpHandle, imageBuffer1);
-    DMADVP_TransferStart(DMADVP0, &dmadvpHandle);
+    //
     /** 初始化IMU */
     //TODO: 在这里初始化IMU（MPU6050）
     /** 菜单就绪 */
     MENU_Resume();
     /** 控制环初始化 */
-    //TODO: 在这里初始化控制环
+    pitMgr_t::insert(5U, 4U, MOTOR_PWM, pitMgr_t::enable);
+    pitMgr_t::insert(20U, 5U, SERVO_PWM, pitMgr_t::enable);
     /** 初始化结束，开启总中断 */
     HAL_ExitCritical();
-    float f = arm_sin_f32(0.6f);
+    while(true)
+    {
 
+    }
 }
-int32_t testInt1 = 19981214;
-int32_t testInt2 = 19981214;
-int32_t testInt3 = 19981214;
-float testFlt = 3.1415926f;
-uint32_t imageTH = 130;
 void MENU_DataSetUp(void)
 {
     menu_list_t *myList_1;
@@ -185,14 +180,14 @@ void MENU_DataSetUp(void)
             MENU_ItemConstruct(
             menuType,   ///> 类型标识，指明这是一个菜单跳转类型的菜单项。
             myList_1,   ///> 数据指针，这里指向要跳转到的菜单列表。
-            "Para_Ctrl", ///> 菜单项名称，在菜单列表中显示。
+            "Control", ///> 菜单项名称，在菜单列表中显示。
             0,          ///> 数据的保存位置，对于非数据类型填0即可。
             0           ///> 属性Flag，无任何属性填0。
         ));
         {   //这里加这组括号只是为了缩进方便，其内部的语句用于向myList_1插入菜单项。
             MENU_ListInsert(myList_1, MENU_ItemConstruct(
-                variType,  ///> 类型标识，指明这是一个整数类型的菜单项
-                &testInt1,  ///> 数据指针，这里指向要操作的整数。必须是int32_t类型。
+                    varfType,  ///> 类型标识，指明这是一个整数类型的菜单项
+                &Motor_L,  ///> 数据指针，这里指向要操作的整数。必须是int32_t类型。
                 "Motor_L",   ///> 菜单项名称，在菜单列表中显示。
                 10,        ///> 数据的保存地址，不能重复且尽可能连续，步长为1。
                            ///> 全局数据区0~9的地址为保留地址，不能使用。
@@ -200,26 +195,61 @@ void MENU_DataSetUp(void)
                            ///> 属性flag。此flag表示该变量存储于全局数据区
             ));
             MENU_ListInsert(myList_1, MENU_ItemConstruct(
-                    variType,  ///> 类型标识，指明这是一个整数类型的菜单项
-                    &testInt2,  ///> 数据指针，这里指向要操作的整数。必须是int32_t类型。
-                    "Motor_L",   ///> 菜单项名称，在菜单列表中显示。
+                    varfType,  ///> 类型标识，指明这是一个整数类型的菜单项
+                    &Motor_R,  ///> 数据指针，这里指向要操作的整数。必须是int32_t类型。
+                    "Motor_R",   ///> 菜单项名称，在菜单列表中显示。
                     11,        ///> 数据的保存地址，不能重复且尽可能连续，步长为1。
                                 ///> 全局数据区0~9的地址为保留地址，不能使用。
                     menuItem_data_global
                                 ///> 属性flag。此flag表示该变量存储于全局数据区.
             ));
             MENU_ListInsert(myList_1, MENU_ItemConstruct(
-                    variType,  ///> 类型标识，指明这是一个整数类型的菜单项
-                    &testInt3,  ///> 数据指针，这里指向要操作的整数。必须是int32_t类型。
-                    "Motor_LR",   ///> 菜单项名称，在菜单列表中显示。
+                    varfType,  ///> 类型标识，指明这是一个整数类型的菜单项
+                    &Servo,  ///> 数据指针，这里指向要操作的整数。必须是int32_t类型。
+                    "Servo",   ///> 菜单项名称，在菜单列表中显示。
                     12,        ///> 数据的保存地址，不能重复且尽可能连续，步长为1。
                     ///> 全局数据区0~9的地址为保留地址，不能使用。
                     menuItem_data_global
                     ///> 属性flag。此flag表示该变量存储于全局数据区.
             ));
+            MENU_ListInsert(myList_1, MENU_ItemConstruct(
+                    varfType,  ///> 类型标识，指明这是一个整数类型的菜单项
+                    &Servo_kp,  ///> 数据指针，这里指向要操作的整数。必须是int32_t类型。
+                    "Servo_kp",   ///> 菜单项名称，在菜单列表中显示。
+                    13,        ///> 数据的保存地址，不能重复且尽可能连续，步长为1。
+                    ///> 全局数据区0~9的地址为保留地址，不能使用。
+                    menuItem_data_global
+                    ///> 属性flag。此flag表示该变量存储于全局数据区.
+            ));
+            MENU_ListInsert(myList_1, MENU_ItemConstruct(
+                    varfType,  ///> 类型标识，指明这是一个整数类型的菜单项
+                    &Servo_kd,  ///> 数据指针，这里指向要操作的整数。必须是int32_t类型。
+                    "Servo_kd",   ///> 菜单项名称，在菜单列表中显示。
+                    14,        ///> 数据的保存地址，不能重复且尽可能连续，步长为1。
+                    ///> 全局数据区0~9的地址为保留地址，不能使用。
+                    menuItem_data_global
+                    ///> 属性flag。此flag表示该变量存储于全局数据区.
+            ));
+            MENU_ListInsert(myList_1, MENU_ItemConstruct(
+                    varfType,  ///> 类型标识，指明这是一个整数类型的菜单项
+                    &Servo_ki,  ///> 数据指针，这里指向要操作的整数。必须是int32_t类型。
+                    "Servo_ki",   ///> 菜单项名称，在菜单列表中显示。
+                    15,        ///> 数据的保存地址，不能重复且尽可能连续，步长为1。
+                    ///> 全局数据区0~9的地址为保留地址，不能使用。
+                    menuItem_data_global
+                    ///> 属性flag。此flag表示该变量存储于全局数据区.
+            ));
+            MENU_ListInsert(myList_1, MENU_ItemConstruct(
+                    procType,  ///> 类型标识，指明这是一个浮点类型的菜单项
+                    Update_Servo_Error,///> 数据指针，这里指向要操作的整数。必须是float类型。
+                    "Run", ///> 菜单项名称，在菜单列表中显示。
+                    0,         ///> 数据的保存地址，不能重复且尽可能连续，步长为1。
+                    menuItem_proc_uiDisplay
+                    ///> 属性flag。此flag表示该该程序运行一次就退出。
+            ));
         }
         myList_2 = MENU_ListConstruct(
-                    "Cam_Test",     ///> 菜单标题，在菜单列表中的第一行显示，最大12字符。
+                    "Image",     ///> 菜单标题，在菜单列表中的第一行显示，最大12字符。
                     10,             ///> 菜单列表的大小，须预留1位用于返回上一级的[back]。
                     menu_menuRoot   ///> 该菜单的上级菜单指针。注意：该指针仅用于返回上级菜单，并不会将子菜单插入上级菜单。
                 );
@@ -231,37 +261,45 @@ void MENU_DataSetUp(void)
                 MENU_ItemConstruct(
                         menuType,   ///> 类型标识，指明这是一个菜单跳转类型的菜单项。
                         myList_2,   ///> 数据指针，这里指向要跳转到的菜单列表。
-                        "Cam_Test", ///> 菜单项名称，在菜单列表中显示。
+                        "Image", ///> 菜单项名称，在菜单列表中显示。
                         0,          ///> 数据的保存位置，对于非数据类型填0即可。
                         0           ///> 属性Flag，无任何属性填0。
                 ));
         {
             MENU_ListInsert(myList_2, MENU_ItemConstruct(
                     variType,  ///> 类型标识，指明这是一个整数类型的菜单项
-                    &imageTH,  ///> 数据指针，这里指向要操作的整数。必须是int32_t类型。
-                    "Image_TH",   ///> 菜单项名称，在菜单列表中显示。
-                    13,        ///> 数据的保存地址，不能重复且尽可能连续，步长为1。
+                    &threshold,  ///> 数据指针，这里指向要操作的整数。必须是int32_t类型。
+                    "threshold",   ///> 菜单项名称，在菜单列表中显示。
+                    16,        ///> 数据的保存地址，不能重复且尽可能连续，步长为1。
                     ///> 全局数据区0~9的地址为保留地址，不能使用。
                     menuItem_data_global
                     ///> 属性flag。此flag表示该变量存储于全局数据区.
-                        ));
+            ));
+            MENU_ListInsert(myList_2, MENU_ItemConstruct(
+                    variType,  ///> 类型标识，指明这是一个整数类型的菜单项
+                    &preview,  ///> 数据指针，这里指向要操作的整数。必须是int32_t类型。
+                    "preview",   ///> 菜单项名称，在菜单列表中显示。
+                    17,        ///> 数据的保存地址，不能重复且尽可能连续，步长为1。
+                    ///> 全局数据区0~9的地址为保留地址，不能使用。
+                    menuItem_data_global
+                    ///> 属性flag。此flag表示该变量存储于全局数据区.
+            ));
             MENU_ListInsert(myList_2, MENU_ItemConstruct(
                     procType,  ///> 类型标识，指明这是一个浮点类型的菜单项
-                    Cam_Test_1,///> 数据指针，这里指向要操作的整数。必须是float类型。
+                    Cam_Test,///> 数据指针，这里指向要操作的整数。必须是float类型。
                     "Cam_Test", ///> 菜单项名称，在菜单列表中显示。
                     0,         ///> 数据的保存地址，不能重复且尽可能连续，步长为1。
                     menuItem_proc_uiDisplay|menuItem_proc_runOnce
                     ///> 属性flag。此flag表示该该程序运行一次就退出。
-                    ));
+            ));
+
         }
 
 }
 
 void CAM_ZF9V034_DmaCallback(edma_handle_t *handle, void *userData, bool transferDone, uint32_t tcds)
 {
-    //TODO: 补完本回调函数，双缓存采图。
 
-    //TODO: 添加图像处理（转向控制也可以写在这里）
 }
 
 /**
@@ -280,5 +318,3 @@ void CAM_ZF9V034_DmaCallback(edma_handle_t *handle, void *userData, bool transfe
  *      中是十分危险的，可能造成车模进入“原地陀螺旋转”的状态，极易损坏车模或
  *      导致人员受伤。在设置电机占空比时务必做好异常保护。
  */
-
-

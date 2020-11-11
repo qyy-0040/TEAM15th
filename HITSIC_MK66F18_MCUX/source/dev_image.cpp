@@ -6,8 +6,19 @@
  */
 /**TEAM 15th Dev**/
 #include "dev_Image.h"
-
-uint8_t* fullBuffer = NULL;
+#include "lib_pidctrl.h"
+extern float Motor_L;
+extern float Motor_R;
+extern float Servo;
+extern float Servo_kp;
+extern float Servo_kd;
+extern float Servo_ki;
+uint8_t *imageBuffer0 = new uint8_t[DMADVP0->imgSize];
+uint8_t *imageBuffer1 = new uint8_t[DMADVP0->imgSize];
+uint8_t *fullBuffer = NULL;
+cam_zf9v034_configPacket_t cameraCfg;
+dmadvp_config_t dmadvpCfg;
+dmadvp_handle_t dmadvpHandle;
 int f[10 * CAMERA_H];//考察连通域联通性
 //每个白条子属性
 typedef struct {
@@ -42,7 +53,9 @@ uint8_t left_line[CAMERA_H], right_line[CAMERA_H];//赛道的左右边界
 uint8_t mid_line[CAMERA_H];
 int all_connect_num = 0;//所有白条子数
 uint8_t top_road;//赛道最高处所在行数
-uint8_t threshold = 160;//阈值
+uint32_t threshold;//阈值
+uint32_t preview ;
+float Servo_cur = 7.80;
 
 ////////////////////////////////////////////
 //功能：二值化
@@ -83,7 +96,7 @@ void head_clear(void)
         my_map = &IMG[i][0];
         for (int j = 40; j <= 135; j++)
         {
-            *(my_map+j) = white;
+            *(my_map+j) = 1;
         }
     }
 }
@@ -359,8 +372,6 @@ void ordinary_two_line(void)
         {
             left_line[i] = my_road[i].connected[j_continue[i]].left;
             right_line[i] = my_road[i].connected[j_continue[i]].right;
-            IMG[i][left_line[i]] = blue;
-            IMG[i][right_line[i]] = red;
         }
         else
         {
@@ -402,7 +413,7 @@ void get_mid_line(void)
         }
         else
         {
-            mid_line[i] = MISS;
+            mid_line[i] = 94;
         }
 
 }
@@ -414,56 +425,99 @@ void get_mid_line(void)
 ///////////////////////////////////////////
 void image_main()
 {
+    THRE();
+    head_clear();
     search_white_range();
     find_all_connect();
     find_road();
     /*到此处为止，我们已经得到了属于赛道的结构体数组my_road[CAMERA_H]*/
     ordinary_two_line();
     get_mid_line();
+}
+void Cam_Test(menu_keyOp_t *_op)
+{
+    MENU_Suspend();
+    //初始化部分：
+    CAM_ZF9V034_GetDefaultConfig(&cameraCfg);                                   //设置摄像头配置
+    CAM_ZF9V034_CfgWrite(&cameraCfg);                                   //写入配置
+    CAM_ZF9V034_GetReceiverConfig(&dmadvpCfg, &cameraCfg);    //生成对应接收器的配置数据，使用此数据初始化接受器并接收图像数据。
+    DMADVP_Init(DMADVP0, &dmadvpCfg);
+    DMADVP_TransferCreateHandle(&dmadvpHandle, DMADVP0, CAM_ZF9V034_UnitTestDmaCallback);
+    uint8_t *imageBuffer0 = new uint8_t[DMADVP0->imgSize];
+    uint8_t *imageBuffer1 = new uint8_t[DMADVP0->imgSize];
+    disp_ssd1306_frameBuffer_t *dispBuffer = new disp_ssd1306_frameBuffer_t;
+    DMADVP_TransferSubmitEmptyBuffer(DMADVP0, &dmadvpHandle, imageBuffer0);
+    DMADVP_TransferSubmitEmptyBuffer(DMADVP0, &dmadvpHandle, imageBuffer1);
+    DMADVP_TransferStart(DMADVP0, &dmadvpHandle);
 
-    for (int i = NEAR_LINE; i >= FAR_LINE; i--)
-        if (mid_line[i] != MISS)
-            IMG[i][mid_line[i]] = red;
-}
-bool cam_test_status = true;
-void Cam_Test_Over(void)
-{
-    DISP_SSD1306_Fill(0);
-    cam_test_status = false;
-}
-void Cam_Test(void)
-{
-    cam_test_status = false;
-    while(cam_test_status)
+
+    while(true)
     {
+
         while (kStatus_Success != DMADVP_TransferGetFullBuffer(DMADVP0, &dmadvpHandle, &fullBuffer));
         dispBuffer->Clear();
         for (int i = 0; i < cameraCfg.imageRow; i += 2)
         {
-                int16_t imageRow = i >> 1;//除以2 为了加速;
-                int16_t dispRow = (imageRow / 8) + 1, dispShift = (imageRow % 8);
-                for (int j = 0; j < cameraCfg.imageCol; j += 2)
+            int16_t imageRow = i >> 1;//除以2 为了加速;
+            int16_t dispRow = (imageRow / 8) + 1, dispShift = (imageRow % 8);
+            for (int j = 0; j < cameraCfg.imageCol; j += 2)
+            {
+                int16_t dispCol = j >> 1;
+                if (fullBuffer[i * cameraCfg.imageCol + j] > threshold)
                 {
-                    int16_t dispCol = j >> 1;
-                    if (fullBuffer[i * cameraCfg.imageCol + j] > imageTH)
-                    {
-                        dispBuffer->SetPixelColor(dispCol, imageRow, 1);
-                    }
-                    if(dispCol == 188/4 || imageRow == 120/4)
-                    {
-                        dispBuffer->SetPixelColor(dispCol, imageRow, 0);
-                    }
+                    dispBuffer->SetPixelColor(dispCol, imageRow, 1);
                 }
+                if(dispCol == 188/4 || imageRow == 120/4)
+                {
+                    dispBuffer->SetPixelColor(dispCol, imageRow, 0);
+                }
+            }
         }
         DISP_SSD1306_BufferUpload((uint8_t*) dispBuffer);
         DMADVP_TransferSubmitEmptyBuffer(DMADVP0, &dmadvpHandle, fullBuffer);
         //PORT_SetPinInterruptConfig(PORTE, 10U, kPORT_InterruptLogicZero);
         //extInt_t::insert(PORTE, 10U,Cam_Test_Over);
+        MENU_Resume();
     }
 }
-void Cam_Test_1(menu_keyOp_t *_op)
+void Update_Servo_Error(menu_keyOp_t *_op)
 {
     MENU_Suspend();
-    //Cam_Test();
+    pidCtrl_t*Servo_pid = PIDCTRL_Construct(Servo_kp, Servo_ki, Servo_kd);
+    float Servo_err = 0;
+    //初始化部分：
+    CAM_ZF9V034_GetDefaultConfig(&cameraCfg);                                   //设置摄像头配置
+    CAM_ZF9V034_CfgWrite(&cameraCfg);                                   //写入配置
+    CAM_ZF9V034_GetReceiverConfig(&dmadvpCfg, &cameraCfg);    //生成对应接收器的配置数据，使用此数据初始化接受器并接收图像数据。
+    DMADVP_Init(DMADVP0, &dmadvpCfg);
+    DMADVP_TransferCreateHandle(&dmadvpHandle, DMADVP0, CAM_ZF9V034_UnitTestDmaCallback);
+    uint8_t *imageBuffer0 = new uint8_t[DMADVP0->imgSize];
+    uint8_t *imageBuffer1 = new uint8_t[DMADVP0->imgSize];
+    disp_ssd1306_frameBuffer_t *dispBuffer = new disp_ssd1306_frameBuffer_t;
+    DMADVP_TransferSubmitEmptyBuffer(DMADVP0, &dmadvpHandle, imageBuffer0);
+    DMADVP_TransferSubmitEmptyBuffer(DMADVP0, &dmadvpHandle, imageBuffer1);
+    DMADVP_TransferStart(DMADVP0, &dmadvpHandle);
+    while(true)
+    {
+        while (kStatus_Success != DMADVP_TransferGetFullBuffer(DMADVP0, &dmadvpHandle, &fullBuffer));
+        image_main();
+        Servo_err =(float) (MIDLINE - mid_line[preview]);
+        if(Servo_err > 50)
+        {
+            Motor_L -= 5;
+            Motor_R -= 5;
+        }
+        Servo_err = Servo_err/10;
+        Servo_cur = Servo + PIDCTRL_UpdateAndCalcPID(Servo_pid, Servo_err);
+        if(Servo_cur > 8.4) Servo_cur = 8.4;
+        else if(Servo_cur < 7.2) Servo_cur = 7.2;
+        //DISP_SSD1306_Fill(0);
+        //snprintf
+        //DISP_SSD1306_Printf_F6x8(0, 0, "%d", mid_line[preview]);
+        //DISP_SSD1306_Printf_F6x8(0, 1, "%f", Servo_err);
+        //DISP_SSD1306_Printf_F6x8(0, 2, "%f", PIDCTRL_UpdateAndCalcPID(Servo_pid, Servo_err));
+        //DISP_SSD1306_Printf_F6x8(0, 3, "%f", Servo_cur);
+        DMADVP_TransferSubmitEmptyBuffer(DMADVP0, &dmadvpHandle, fullBuffer);
+    }
     MENU_Resume();
 }
