@@ -37,12 +37,7 @@
 
 extern uint8_t IMG[CAMERA_H][CAMERA_W];//二值化后图像数组
 extern uint8_t image_Buffer_0[CAMERA_H][CAMERA_W];
-extern uint8_t* fullBuffer;
 extern uint32_t imageTH;//指向灰度图的首地址
-extern cam_zf9v034_configPacket_t cameraCfg;
-extern dmadvp_config_t dmadvpCfg;
-extern dmadvp_handle_t dmadvpHandle;
-extern disp_ssd1306_frameBuffer_t *dispBuffer;
 
 void head_clear(void);
 void THRE(void);
@@ -58,4 +53,5 @@ void my_memset(uint8_t* ptr, uint8_t num, uint8_t size);
 void Cam_Test_Over(void);
 void Cam_Test(void);
 void Cam_Test_1(menu_keyOp_t *_op);
+void Cam_Init(void);
 #endif //
