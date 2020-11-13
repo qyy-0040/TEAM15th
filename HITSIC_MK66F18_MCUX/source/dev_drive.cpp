@@ -6,9 +6,15 @@
  */
 #include"sc_ftm.h"
 #include "dev_drive.h"
-float Motor_L = 10.50;
-float Motor_R = 10.50;
-float Servo = 5.60;
+#include "lib_pidctrl.h"
+float Motor_L = 25.00;
+float Motor_R = 25.00;
+float Servo;
+float Servo_kp;
+float Servo_kd;
+float Servo_ki;
+extern float Servo_cur;
+
 void MOTOR_PWM(void)
 {
     SCFTM_PWM_ChangeHiRes(FTM0,kFTM_Chnl_0,20000U,Motor_L);
@@ -18,7 +24,7 @@ void MOTOR_PWM(void)
 }
 void SERVO_PWM(void)
 {
-    SCFTM_PWM_ChangeHiRes(FTM3,kFTM_Chnl_7,50U,Servo);
+    SCFTM_PWM_ChangeHiRes(FTM3,kFTM_Chnl_7,50U,Servo_cur);
 }
 
 
