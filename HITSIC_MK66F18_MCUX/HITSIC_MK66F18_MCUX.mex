@@ -159,6 +159,7 @@
                   <pin peripheral="ADC1" signal="VREFL" pin_num="33" pin_signal="VREFL"/>
                   <pin peripheral="ADC0" signal="VALTL" pin_num="34" pin_signal="VSSA"/>
                   <pin peripheral="ADC1" signal="VALTL" pin_num="34" pin_signal="VSSA"/>
+                  <pin peripheral="GPIOA" signal="GPIO, 9" pin_num="61" pin_signal="PTA9/FTM1_CH1/MII0_RXD3/FTM1_QD_PHB/TPM1_CH1/TRACE_D1"/>
                </pins>
             </function>
             <function name="RTEPIN_Digital">
