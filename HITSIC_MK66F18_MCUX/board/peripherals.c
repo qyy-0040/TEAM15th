@@ -1069,7 +1069,7 @@ instance:
  * BE CAREFUL MODIFYING THIS COMMENT - IT IS YAML SETTINGS FOR TOOLS **********/
 /* clang-format on */
 const uart_config_t WLAN_UART_config = {
-  .baudRate_Bps = 921600UL,
+  .baudRate_Bps = 1152000UL,
   .parityMode = kUART_ParityDisabled,
   .stopBitCount = kUART_OneStopBit,
   .txFifoWatermark = 0U,

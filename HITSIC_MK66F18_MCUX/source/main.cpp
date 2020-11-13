@@ -74,6 +74,7 @@ FATFS fatfs;                                   //逻辑驱动器的工作区
 
 #include "sc_adc.h"
 #include "sc_ftm.h"
+#include "sc_host.h"
 
 /** HITSIC_Module_TEST */
 #include "drv_cam_zf9v034_test.hpp"
@@ -149,14 +150,50 @@ void main(void)
     /** 初始化IMU */
     //TODO: 在这里初始化IMU（MPU6050）
     /** 菜单就绪 */
-    MENU_Resume();
+    //MENU_Resume();
     /** 控制环初始化 */
     pitMgr_t::insert(5U, 4U, MOTOR_PWM, pitMgr_t::enable);
     pitMgr_t::insert(20U, 5U, SERVO_PWM, pitMgr_t::enable);
     /** 初始化结束，开启总中断 */
     HAL_ExitCritical();
+    //初始化部分：
+    cam_zf9v034_configPacket_t cameraCfg;
+    CAM_ZF9V034_GetDefaultConfig(&cameraCfg);                                   //设置摄像头配置
+    CAM_ZF9V034_CfgWrite(&cameraCfg);                                   //写入配置
+    dmadvp_config_t dmadvpCfg;
+    CAM_ZF9V034_GetReceiverConfig(&dmadvpCfg, &cameraCfg);    //生成对应接收器的配置数据，使用此数据初始化接受器并接收图像数据。
+    DMADVP_Init(DMADVP0, &dmadvpCfg);
+    dmadvp_handle_t dmadvpHandle;
+    DMADVP_TransferCreateHandle(&dmadvpHandle, DMADVP0, CAM_ZF9V034_UnitTestDmaCallback);
+    uint8_t *imageBuffer0 = new uint8_t[DMADVP0->imgSize];
+    //uint8_t *imageBuffer1 = new uint8_t[DMADVP0->imgSize];
+    uint8_t *fullBuffer = NULL;
+    disp_ssd1306_frameBuffer_t *dispBuffer = new disp_ssd1306_frameBuffer_t;
+    DMADVP_TransferSubmitEmptyBuffer(DMADVP0, &dmadvpHandle, imageBuffer0);
+    //DMADVP_TransferSubmitEmptyBuffer(DMADVP0, &dmadvpHandle, imageBuffer1);
+    DMADVP_TransferStart(DMADVP0, &dmadvpHandle);
     while(true)
     {
+        while (kStatus_Success != DMADVP_TransferGetFullBuffer(DMADVP0, &dmadvpHandle, &fullBuffer));
+        SCHOST_ImgUpload(fullBuffer, 120, 188);
+        dispBuffer->Clear();
+        const uint8_t imageTH = 212;
+        for (int i = 0; i < cameraCfg.imageRow; i += 2)
+        {
+            int16_t imageRow = i >> 1;//除以2 为了加速;
+            int16_t dispRow = (imageRow / 8) + 1, dispShift = (imageRow % 8);
+            for (int j = 0; j < cameraCfg.imageCol; j += 2)
+            {
+                int16_t dispCol = j >> 1;
+                if (fullBuffer[i * cameraCfg.imageCol + j] > imageTH)
+                {
+                    dispBuffer->SetPixelColor(dispCol, imageRow, 1);
+                }
+            }
+        }
+        DISP_SSD1306_BufferUpload((uint8_t*) dispBuffer);
+        DMADVP_TransferSubmitEmptyBuffer(DMADVP0, &dmadvpHandle, fullBuffer);
+        DMADVP_TransferStart(DMADVP0, &dmadvpHandle);
 
     }
 }

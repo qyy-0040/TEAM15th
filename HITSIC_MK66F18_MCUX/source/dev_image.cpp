@@ -14,7 +14,7 @@ extern float Servo_kp;
 extern float Servo_kd;
 extern float Servo_ki;
 uint8_t *imageBuffer0 = new uint8_t[DMADVP0->imgSize];
-uint8_t *imageBuffer1 = new uint8_t[DMADVP0->imgSize];
+//uint8_t *imageBuffer1 = new uint8_t[DMADVP0->imgSize];
 uint8_t *fullBuffer = NULL;
 cam_zf9v034_configPacket_t cameraCfg;
 dmadvp_config_t dmadvpCfg;
@@ -443,11 +443,9 @@ void Cam_Test(menu_keyOp_t *_op)
     CAM_ZF9V034_GetReceiverConfig(&dmadvpCfg, &cameraCfg);    //生成对应接收器的配置数据，使用此数据初始化接受器并接收图像数据。
     DMADVP_Init(DMADVP0, &dmadvpCfg);
     DMADVP_TransferCreateHandle(&dmadvpHandle, DMADVP0, CAM_ZF9V034_UnitTestDmaCallback);
-    uint8_t *imageBuffer0 = new uint8_t[DMADVP0->imgSize];
-    uint8_t *imageBuffer1 = new uint8_t[DMADVP0->imgSize];
     disp_ssd1306_frameBuffer_t *dispBuffer = new disp_ssd1306_frameBuffer_t;
     DMADVP_TransferSubmitEmptyBuffer(DMADVP0, &dmadvpHandle, imageBuffer0);
-    DMADVP_TransferSubmitEmptyBuffer(DMADVP0, &dmadvpHandle, imageBuffer1);
+    //DMADVP_TransferSubmitEmptyBuffer(DMADVP0, &dmadvpHandle, imageBuffer1);
     DMADVP_TransferStart(DMADVP0, &dmadvpHandle);
 
 
@@ -475,9 +473,8 @@ void Cam_Test(menu_keyOp_t *_op)
         }
         DISP_SSD1306_BufferUpload((uint8_t*) dispBuffer);
         DMADVP_TransferSubmitEmptyBuffer(DMADVP0, &dmadvpHandle, fullBuffer);
+        DMADVP_TransferStart(DMADVP0, &dmadvpHandle);
         //PORT_SetPinInterruptConfig(PORTE, 10U, kPORT_InterruptLogicZero);
-        //extInt_t::insert(PORTE, 10U,Cam_Test_Over);
-        MENU_Resume();
     }
 }
 void Update_Servo_Error(menu_keyOp_t *_op)
