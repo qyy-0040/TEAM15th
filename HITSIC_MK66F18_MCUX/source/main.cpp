@@ -90,19 +90,22 @@ FATFS fatfs;                                   //逻辑驱动器的工作区
 #include "dev_drive.h"
 
 void MENU_DataSetUp(void);
-void CAM_ZF9V034_DmaCallback(edma_handle_t *handle, void *userData, bool transferDone, uint32_t tcds);
 
 inv::i2cInterface_t imu_i2c(nullptr, IMU_INV_I2cRxBlocking, IMU_INV_I2cTxBlocking);
 inv::mpu6050_t imu_6050(imu_i2c);
+
 
 disp_ssd1306_frameBuffer_t dispBuffer;
 graphic::bufPrint0608_t<disp_ssd1306_frameBuffer_t> bufPrinter(dispBuffer);
 extern float Motor_L;
 extern float Motor_R;
+extern float Motor_L_Output;
+extern float Motor_R_Output;
 extern float Servo;
 extern float Servo_kp;
 extern float Servo_kd;
 extern float Servo_ki;
+extern float Servo_Output;
 extern uint32_t threshold;
 extern uint32_t preview;
 
@@ -131,7 +134,7 @@ void main(void)
     DISP_SSD1306_Init();
     extern const uint8_t DISP_image_100thAnniversary[8][128];
     DISP_SSD1306_BufferUpload((uint8_t*) DISP_image_100thAnniversary);
-    DISP_SSD1306_delay_ms(1000);
+    DISP_SSD1306_delay_ms(500);
     /** 初始化ftfx_Flash */
     FLASH_SimpleInit();
     /** 初始化PIT中断管理器 */
@@ -145,7 +148,7 @@ void main(void)
     /** 菜单挂起 */
     MENU_Suspend();
     /** 初始化摄像头 */
-    //
+    Cam_Init();
     /** 初始化IMU */
     //TODO: 在这里初始化IMU（MPU6050）
     /** 菜单就绪 */
@@ -153,8 +156,20 @@ void main(void)
     /** 控制环初始化 */
     pitMgr_t::insert(5U, 4U, MOTOR_PWM, pitMgr_t::enable);
     pitMgr_t::insert(20U, 5U, SERVO_PWM, pitMgr_t::enable);
+    /**外部中断初始化**/
+    PORT_SetPinInterruptConfig(PORTA, 9U, kPORT_InterruptRisingEdge);
+    extInt_t::insert(PORTA, 9U,MENU_Suspend);
+    PORT_SetPinInterruptConfig(PORTA, 9U, kPORT_InterruptFallingEdge);
+    extInt_t::insert(PORTA, 9U,MENU_Resume);
+    PORT_SetPinInterruptConfig(PORTA, 11U, kPORT_InterruptLogicZero);
+    extInt_t::insert(PORTA, 11U,Update_Servo_Error);
+    PORT_SetPinInterruptConfig(PORTA, 13U, kPORT_InterruptLogicZero);
+    extInt_t::insert(PORTA, 13U,Cam_Init);
     /** 初始化结束，开启总中断 */
     HAL_ExitCritical();
+    Servo_Output = Servo;
+    Motor_L_Output = Motor_L;
+    Motor_R_Output = Motor_R;
     while(true)
     {
 
@@ -162,12 +177,10 @@ void main(void)
 }
 void MENU_DataSetUp(void)
 {
-    menu_list_t *myList_1;
-    menu_list_t *myList_2;
     MENU_ListInsert(menu_menuRoot, MENU_ItemConstruct(nullType, NULL, "", 0, 0));
 
     /** 子菜单指针初始化 */
-    myList_1 = MENU_ListConstruct(
+    menu_list_t *myList_1 = MENU_ListConstruct(
             "Para_Ctrl",     ///> 菜单标题，在菜单列表中的第一行显示，最大12字符。
             10,             ///> 菜单列表的大小，须预留1位用于返回上一级的[back]。
             menu_menuRoot   ///> 该菜单的上级菜单指针。注意：该指针仅用于返回上级菜单，并不会将子菜单插入上级菜单。
@@ -239,16 +252,8 @@ void MENU_DataSetUp(void)
                     menuItem_data_global
                     ///> 属性flag。此flag表示该变量存储于全局数据区.
             ));
-            MENU_ListInsert(myList_1, MENU_ItemConstruct(
-                    procType,  ///> 类型标识，指明这是一个浮点类型的菜单项
-                    Update_Servo_Error,///> 数据指针，这里指向要操作的整数。必须是float类型。
-                    "Run", ///> 菜单项名称，在菜单列表中显示。
-                    0,         ///> 数据的保存地址，不能重复且尽可能连续，步长为1。
-                    menuItem_proc_uiDisplay
-                    ///> 属性flag。此flag表示该该程序运行一次就退出。
-            ));
         }
-        myList_2 = MENU_ListConstruct(
+        menu_list_t *myList_2 = MENU_ListConstruct(
                     "Image",     ///> 菜单标题，在菜单列表中的第一行显示，最大12字符。
                     10,             ///> 菜单列表的大小，须预留1位用于返回上一级的[back]。
                     menu_menuRoot   ///> 该菜单的上级菜单指针。注意：该指针仅用于返回上级菜单，并不会将子菜单插入上级菜单。
@@ -294,11 +299,33 @@ void MENU_DataSetUp(void)
             ));
 
         }
-
-}
-
-void CAM_ZF9V034_DmaCallback(edma_handle_t *handle, void *userData, bool transferDone, uint32_t tcds)
-{
+        menu_list_t *myList_3 = MENU_ListConstruct(
+                "RUN",     ///> 菜单标题，在菜单列表中的第一行显示，最大12字符。
+                5,             ///> 菜单列表的大小，须预留1位用于返回上一级的[back]。
+                menu_menuRoot   ///> 该菜单的上级菜单指针。注意：该指针仅用于返回上级菜单，并不会将子菜单插入上级菜单。
+        );
+        /** 检查内存分配是否成功 */
+        assert(myList_3);
+        /** 将子菜单的跳转入口插入其上级菜单 */
+        MENU_ListInsert(
+                menu_menuRoot,  ///> 要插入的上级菜单。
+                MENU_ItemConstruct(
+                        menuType,   ///> 类型标识，指明这是一个菜单跳转类型的菜单项。
+                        myList_3,   ///> 数据指针，这里指向要跳转到的菜单列表。
+                        "RUN", ///> 菜单项名称，在菜单列表中显示。
+                        0,          ///> 数据的保存位置，对于非数据类型填0即可。
+                        0           ///> 属性Flag，无任何属性填0。
+                ));
+        {
+            MENU_ListInsert(myList_3, MENU_ItemConstruct(
+                    procType,  ///> 类型标识，指明这是一个浮点类型的菜单项
+                    Update_Servo_Error,///> 数据指针，这里指向要操作的整数。必须是float类型。
+                    "GOGOGO", ///> 菜单项名称，在菜单列表中显示。
+                    0,         ///> 数据的保存地址，不能重复且尽可能连续，步长为1。
+                    menuItem_proc_uiDisplay
+                    ///> 属性flag。此flag表示该该程序运行一次就退出。
+            ));
+        }
 
 }
 
