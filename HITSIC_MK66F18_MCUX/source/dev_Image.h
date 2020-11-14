@@ -41,7 +41,8 @@ void ordinary_two_line(void);
 void image_main();
 void get_mid_line(void);
 void my_memset(uint8_t* ptr, uint8_t num, uint8_t size);
-void Cam_Test(menu_keyOp_t *_op);
-void Update_Servo_Error(menu_keyOp_t *_op);
+void Cam_Test(void);
+void Update_Servo_Error(void);
 void Cam_Init(void);
+void CAM_ZF9V034_DmaCallback(edma_handle_t *handle, void *userData, bool transferDone, uint32_t tcds);
 #endif //

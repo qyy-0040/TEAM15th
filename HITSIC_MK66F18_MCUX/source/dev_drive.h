@@ -9,8 +9,8 @@
 #define DEV_DRIVE_H_
 
 
-void MOTOR_PWM(void);
-void SERVO_PWM(void);
+void MOTOR_PWM(void* userData);
+void SERVO_PWM(void* userData);
 
 
 
