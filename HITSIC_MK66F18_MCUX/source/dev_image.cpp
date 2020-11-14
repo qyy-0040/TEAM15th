@@ -55,7 +55,7 @@ int all_connect_num = 0;//所有白条子数
 uint8_t top_road;//赛道最高处所在行数
 uint32_t threshold;//阈值
 uint32_t preview ;
-float Servo_cur = 7.80;
+float Servo_cur;
 
 ////////////////////////////////////////////
 //功能：二值化

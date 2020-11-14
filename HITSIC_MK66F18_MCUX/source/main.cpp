@@ -103,6 +103,7 @@ extern float Servo;
 extern float Servo_kp;
 extern float Servo_kd;
 extern float Servo_ki;
+extern float Servo_cur;
 extern uint32_t threshold;
 extern uint32_t preview;
 
@@ -155,6 +156,7 @@ void main(void)
     pitMgr_t::insert(20U, 5U, SERVO_PWM, pitMgr_t::enable);
     /** 初始化结束，开启总中断 */
     HAL_ExitCritical();
+    Servo_cur = Servo;
     while(true)
     {
 
