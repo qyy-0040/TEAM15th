@@ -43,4 +43,5 @@ void get_mid_line(void);
 void my_memset(uint8_t* ptr, uint8_t num, uint8_t size);
 void Cam_Test(menu_keyOp_t *_op);
 void Update_Servo_Error(menu_keyOp_t *_op);
+void Cam_Init(void);
 #endif //

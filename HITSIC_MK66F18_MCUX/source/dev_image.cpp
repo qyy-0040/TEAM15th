@@ -55,7 +55,7 @@ int all_connect_num = 0;//所有白条子数
 uint8_t top_road;//赛道最高处所在行数
 uint32_t threshold;//阈值
 uint32_t preview ;
-float Servo_cur = 7.80;
+float Servo_cur;
 
 ////////////////////////////////////////////
 //功能：二值化
@@ -446,9 +446,6 @@ void Cam_Test(menu_keyOp_t *_op)
     uint8_t *imageBuffer0 = new uint8_t[DMADVP0->imgSize];
     uint8_t *imageBuffer1 = new uint8_t[DMADVP0->imgSize];
     disp_ssd1306_frameBuffer_t *dispBuffer = new disp_ssd1306_frameBuffer_t;
-    DMADVP_TransferSubmitEmptyBuffer(DMADVP0, &dmadvpHandle, imageBuffer0);
-    DMADVP_TransferSubmitEmptyBuffer(DMADVP0, &dmadvpHandle, imageBuffer1);
-    DMADVP_TransferStart(DMADVP0, &dmadvpHandle);
 
 
     while(true)
@@ -485,18 +482,6 @@ void Update_Servo_Error(menu_keyOp_t *_op)
     MENU_Suspend();
     pidCtrl_t*Servo_pid = PIDCTRL_Construct(Servo_kp, Servo_ki, Servo_kd);
     float Servo_err = 0;
-    //初始化部分：
-    CAM_ZF9V034_GetDefaultConfig(&cameraCfg);                                   //设置摄像头配置
-    CAM_ZF9V034_CfgWrite(&cameraCfg);                                   //写入配置
-    CAM_ZF9V034_GetReceiverConfig(&dmadvpCfg, &cameraCfg);    //生成对应接收器的配置数据，使用此数据初始化接受器并接收图像数据。
-    DMADVP_Init(DMADVP0, &dmadvpCfg);
-    DMADVP_TransferCreateHandle(&dmadvpHandle, DMADVP0, CAM_ZF9V034_UnitTestDmaCallback);
-    uint8_t *imageBuffer0 = new uint8_t[DMADVP0->imgSize];
-    uint8_t *imageBuffer1 = new uint8_t[DMADVP0->imgSize];
-    disp_ssd1306_frameBuffer_t *dispBuffer = new disp_ssd1306_frameBuffer_t;
-    DMADVP_TransferSubmitEmptyBuffer(DMADVP0, &dmadvpHandle, imageBuffer0);
-    DMADVP_TransferSubmitEmptyBuffer(DMADVP0, &dmadvpHandle, imageBuffer1);
-    DMADVP_TransferStart(DMADVP0, &dmadvpHandle);
     while(true)
     {
         while (kStatus_Success != DMADVP_TransferGetFullBuffer(DMADVP0, &dmadvpHandle, &fullBuffer));
@@ -520,4 +505,16 @@ void Update_Servo_Error(menu_keyOp_t *_op)
         DMADVP_TransferSubmitEmptyBuffer(DMADVP0, &dmadvpHandle, fullBuffer);
     }
     MENU_Resume();
+}
+
+void Cam_Init(void)
+{
+    CAM_ZF9V034_GetDefaultConfig(&cameraCfg);                 //设置摄像头配置
+    CAM_ZF9V034_CfgWrite(&cameraCfg);                         //写入配置
+    CAM_ZF9V034_GetReceiverConfig(&dmadvpCfg, &cameraCfg);    //生成对应接收器的配置数据，使用此数据初始化接受器并接收图像数据。
+    DMADVP_Init(DMADVP0, &dmadvpCfg);
+    DMADVP_TransferCreateHandle(&dmadvpHandle, DMADVP0, CAM_ZF9V034_UnitTestDmaCallback);
+    DMADVP_TransferSubmitEmptyBuffer(DMADVP0, &dmadvpHandle, imageBuffer0);
+    DMADVP_TransferSubmitEmptyBuffer(DMADVP0, &dmadvpHandle, imageBuffer1);
+    DMADVP_TransferStart(DMADVP0, &dmadvpHandle);
 }

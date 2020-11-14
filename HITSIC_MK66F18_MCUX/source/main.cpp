@@ -95,6 +95,13 @@ void CAM_ZF9V034_DmaCallback(edma_handle_t *handle, void *userData, bool transfe
 inv::i2cInterface_t imu_i2c(nullptr, IMU_INV_I2cRxBlocking, IMU_INV_I2cTxBlocking);
 inv::mpu6050_t imu_6050(imu_i2c);
 
+
+extern uint8_t *imageBuffer0;
+extern uint8_t *imageBuffer1;
+extern uint8_t *fullBuffer;
+extern cam_zf9v034_configPacket_t cameraCfg;
+extern dmadvp_config_t dmadvpCfg;
+extern dmadvp_handle_t dmadvpHandle;
 disp_ssd1306_frameBuffer_t dispBuffer;
 graphic::bufPrint0608_t<disp_ssd1306_frameBuffer_t> bufPrinter(dispBuffer);
 extern float Motor_L;
@@ -103,6 +110,7 @@ extern float Servo;
 extern float Servo_kp;
 extern float Servo_kd;
 extern float Servo_ki;
+extern float Servo_cur;
 extern uint32_t threshold;
 extern uint32_t preview;
 
@@ -131,7 +139,7 @@ void main(void)
     DISP_SSD1306_Init();
     extern const uint8_t DISP_image_100thAnniversary[8][128];
     DISP_SSD1306_BufferUpload((uint8_t*) DISP_image_100thAnniversary);
-    DISP_SSD1306_delay_ms(1000);
+    DISP_SSD1306_delay_ms(500);
     /** 初始化ftfx_Flash */
     FLASH_SimpleInit();
     /** 初始化PIT中断管理器 */
@@ -145,7 +153,7 @@ void main(void)
     /** 菜单挂起 */
     MENU_Suspend();
     /** 初始化摄像头 */
-    //
+    Cam_Init();
     /** 初始化IMU */
     //TODO: 在这里初始化IMU（MPU6050）
     /** 菜单就绪 */
@@ -155,6 +163,7 @@ void main(void)
     pitMgr_t::insert(20U, 5U, SERVO_PWM, pitMgr_t::enable);
     /** 初始化结束，开启总中断 */
     HAL_ExitCritical();
+    Servo_cur = Servo;
     while(true)
     {
 

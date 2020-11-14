@@ -7,8 +7,8 @@
 #include"sc_ftm.h"
 #include "dev_drive.h"
 #include "lib_pidctrl.h"
-float Motor_L = 25.00;
-float Motor_R = 25.00;
+float Motor_L;
+float Motor_R;
 float Servo;
 float Servo_kp;
 float Servo_kd;
