@@ -154,8 +154,7 @@ void main(void)
     /** 菜单就绪 */
     MENU_Resume();
     /** 控制环初始化 */
-    pitMgr_t::insert(5U, 4U, MOTOR_PWM, pitMgr_t::enable);
-    pitMgr_t::insert(20U, 5U, SERVO_PWM, pitMgr_t::enable);
+    CTRL_Init();
     /**外部中断初始化**/
     PORT_SetPinInterruptConfig(PORTA, 9U, kPORT_InterruptRisingEdge);
     extInt_t::insert(PORTA, 9U,MENU_Suspend);
@@ -167,9 +166,6 @@ void main(void)
     extInt_t::insert(PORTA, 13U,Cam_Init);
     /** 初始化结束，开启总中断 */
     HAL_ExitCritical();
-    Servo_Output = Servo;
-    Motor_L_Output = Motor_L;
-    Motor_R_Output = Motor_R;
     while(true)
     {
 
@@ -177,11 +173,12 @@ void main(void)
 }
 void MENU_DataSetUp(void)
 {
-    MENU_ListInsert(menu_menuRoot, MENU_ItemConstruct(nullType, NULL, "", 0, 0));
+    MENU_ListInsert(menu_menuRoot, MENU_ItemConstruct(nullType, NULL, "TEAM15th", 0, 0));
+    CTRL_MenuInit(menu_menuRoot);
 
     /** 子菜单指针初始化 */
     menu_list_t *myList_1 = MENU_ListConstruct(
-            "Para_Ctrl",     ///> 菜单标题，在菜单列表中的第一行显示，最大12字符。
+            "Control",     ///> 菜单标题，在菜单列表中的第一行显示，最大12字符。
             10,             ///> 菜单列表的大小，须预留1位用于返回上一级的[back]。
             menu_menuRoot   ///> 该菜单的上级菜单指针。注意：该指针仅用于返回上级菜单，并不会将子菜单插入上级菜单。
         );

@@ -424,8 +424,9 @@ void get_mid_line(void)
 //输出：
 //备注：
 ///////////////////////////////////////////
-void image_main()
+float image_main(void)
 {
+
     THRE();
     head_clear();
     search_white_range();
@@ -434,6 +435,8 @@ void image_main()
     /*到此处为止，我们已经得到了属于赛道的结构体数组my_road[CAMERA_H]*/
     ordinary_two_line();
     get_mid_line();
+    float Servo_err = MIDLINE - mid_line[preview];
+    return Servo_err/10;
 }
 
 
@@ -497,6 +500,4 @@ void CAM_ZF9V034_DmaCallback(edma_handle_t *handle, void *userData, bool transfe
         Update_Servo_Output(MIDLINE-mid_line[preview]);
         Update_Motor_Output(0);
     }
-
-
 }
