@@ -87,28 +87,14 @@ FATFS fatfs;                                   //逻辑驱动器的工作区
 
 /**TEAM 15th Dev**/
 #include "dev_Image.h"
-#include "dev_drive.h"
+#include "dev_control.hpp"
 
 void MENU_DataSetUp(void);
 
 inv::i2cInterface_t imu_i2c(nullptr, IMU_INV_I2cRxBlocking, IMU_INV_I2cTxBlocking);
 inv::mpu6050_t imu_6050(imu_i2c);
 
-
-disp_ssd1306_frameBuffer_t dispBuffer;
-graphic::bufPrint0608_t<disp_ssd1306_frameBuffer_t> bufPrinter(dispBuffer);
-extern float Motor_L;
-extern float Motor_R;
-extern float Motor_L_Output;
-extern float Motor_R_Output;
-extern float Servo;
-extern float Servo_kp;
-extern float Servo_kd;
-extern float Servo_ki;
-extern float Servo_Output;
-extern uint32_t threshold;
-extern uint32_t preview;
-
+bool menu_suspend_staus = false;
 void main(void)
 {
     /** 初始化阶段，关闭总中断 */
@@ -156,174 +142,32 @@ void main(void)
     /** 控制环初始化 */
     CTRL_Init();
     /**外部中断初始化**/
-    PORT_SetPinInterruptConfig(PORTA, 9U, kPORT_InterruptRisingEdge);
-    extInt_t::insert(PORTA, 9U,MENU_Suspend);
-    PORT_SetPinInterruptConfig(PORTA, 9U, kPORT_InterruptFallingEdge);
-    extInt_t::insert(PORTA, 9U,MENU_Resume);
-    PORT_SetPinInterruptConfig(PORTA, 11U, kPORT_InterruptLogicZero);
-    extInt_t::insert(PORTA, 11U,Update_Servo_Error);
-    PORT_SetPinInterruptConfig(PORTA, 13U, kPORT_InterruptLogicZero);
-    extInt_t::insert(PORTA, 13U,Cam_Init);
+    //PORT_SetPinInterruptConfig(PORTA, 9U, kPORT_InterruptLogicZero);
+    //extInt_t::insert(PORTA, 9U,Cam_Test);
     /** 初始化结束，开启总中断 */
     HAL_ExitCritical();
     while(true)
     {
-
+        if(GPIO_PinRead(GPIOA, 9)==0 && menu_suspend_staus==false)
+        {
+            MENU_Suspend();
+            menu_suspend_staus = true;
+        }
+        while(menu_suspend_staus)
+        {
+            Cam_Test();
+            if(GPIO_PinRead(GPIOA, 9)==1 && menu_suspend_staus==true)
+            {
+                MENU_Resume();
+                menu_suspend_staus = false;
+            }
+        }
     }
 }
 void MENU_DataSetUp(void)
 {
     MENU_ListInsert(menu_menuRoot, MENU_ItemConstruct(nullType, NULL, "TEAM15th", 0, 0));
     CTRL_MenuInit(menu_menuRoot);
-
-    /** 子菜单指针初始化 */
-    menu_list_t *myList_1 = MENU_ListConstruct(
-            "Control",     ///> 菜单标题，在菜单列表中的第一行显示，最大12字符。
-            10,             ///> 菜单列表的大小，须预留1位用于返回上一级的[back]。
-            menu_menuRoot   ///> 该菜单的上级菜单指针。注意：该指针仅用于返回上级菜单，并不会将子菜单插入上级菜单。
-        );
-    /** 检查内存分配是否成功 */
-        assert(myList_1);
-    /** 将子菜单的跳转入口插入其上级菜单 */
-        MENU_ListInsert(
-            menu_menuRoot,  ///> 要插入的上级菜单。
-            MENU_ItemConstruct(
-            menuType,   ///> 类型标识，指明这是一个菜单跳转类型的菜单项。
-            myList_1,   ///> 数据指针，这里指向要跳转到的菜单列表。
-            "Control", ///> 菜单项名称，在菜单列表中显示。
-            0,          ///> 数据的保存位置，对于非数据类型填0即可。
-            0           ///> 属性Flag，无任何属性填0。
-        ));
-        {   //这里加这组括号只是为了缩进方便，其内部的语句用于向myList_1插入菜单项。
-            MENU_ListInsert(myList_1, MENU_ItemConstruct(
-                    varfType,  ///> 类型标识，指明这是一个整数类型的菜单项
-                &Motor_L,  ///> 数据指针，这里指向要操作的整数。必须是int32_t类型。
-                "Motor_L",   ///> 菜单项名称，在菜单列表中显示。
-                10,        ///> 数据的保存地址，不能重复且尽可能连续，步长为1。
-                           ///> 全局数据区0~9的地址为保留地址，不能使用。
-                menuItem_data_global
-                           ///> 属性flag。此flag表示该变量存储于全局数据区
-            ));
-            MENU_ListInsert(myList_1, MENU_ItemConstruct(
-                    varfType,  ///> 类型标识，指明这是一个整数类型的菜单项
-                    &Motor_R,  ///> 数据指针，这里指向要操作的整数。必须是int32_t类型。
-                    "Motor_R",   ///> 菜单项名称，在菜单列表中显示。
-                    11,        ///> 数据的保存地址，不能重复且尽可能连续，步长为1。
-                                ///> 全局数据区0~9的地址为保留地址，不能使用。
-                    menuItem_data_global
-                                ///> 属性flag。此flag表示该变量存储于全局数据区.
-            ));
-            MENU_ListInsert(myList_1, MENU_ItemConstruct(
-                    varfType,  ///> 类型标识，指明这是一个整数类型的菜单项
-                    &Servo,  ///> 数据指针，这里指向要操作的整数。必须是int32_t类型。
-                    "Servo",   ///> 菜单项名称，在菜单列表中显示。
-                    12,        ///> 数据的保存地址，不能重复且尽可能连续，步长为1。
-                    ///> 全局数据区0~9的地址为保留地址，不能使用。
-                    menuItem_data_global
-                    ///> 属性flag。此flag表示该变量存储于全局数据区.
-            ));
-            MENU_ListInsert(myList_1, MENU_ItemConstruct(
-                    varfType,  ///> 类型标识，指明这是一个整数类型的菜单项
-                    &Servo_kp,  ///> 数据指针，这里指向要操作的整数。必须是int32_t类型。
-                    "Servo_kp",   ///> 菜单项名称，在菜单列表中显示。
-                    13,        ///> 数据的保存地址，不能重复且尽可能连续，步长为1。
-                    ///> 全局数据区0~9的地址为保留地址，不能使用。
-                    menuItem_data_global
-                    ///> 属性flag。此flag表示该变量存储于全局数据区.
-            ));
-            MENU_ListInsert(myList_1, MENU_ItemConstruct(
-                    varfType,  ///> 类型标识，指明这是一个整数类型的菜单项
-                    &Servo_kd,  ///> 数据指针，这里指向要操作的整数。必须是int32_t类型。
-                    "Servo_kd",   ///> 菜单项名称，在菜单列表中显示。
-                    14,        ///> 数据的保存地址，不能重复且尽可能连续，步长为1。
-                    ///> 全局数据区0~9的地址为保留地址，不能使用。
-                    menuItem_data_global
-                    ///> 属性flag。此flag表示该变量存储于全局数据区.
-            ));
-            MENU_ListInsert(myList_1, MENU_ItemConstruct(
-                    varfType,  ///> 类型标识，指明这是一个整数类型的菜单项
-                    &Servo_ki,  ///> 数据指针，这里指向要操作的整数。必须是int32_t类型。
-                    "Servo_ki",   ///> 菜单项名称，在菜单列表中显示。
-                    15,        ///> 数据的保存地址，不能重复且尽可能连续，步长为1。
-                    ///> 全局数据区0~9的地址为保留地址，不能使用。
-                    menuItem_data_global
-                    ///> 属性flag。此flag表示该变量存储于全局数据区.
-            ));
-        }
-        menu_list_t *myList_2 = MENU_ListConstruct(
-                    "Image",     ///> 菜单标题，在菜单列表中的第一行显示，最大12字符。
-                    10,             ///> 菜单列表的大小，须预留1位用于返回上一级的[back]。
-                    menu_menuRoot   ///> 该菜单的上级菜单指针。注意：该指针仅用于返回上级菜单，并不会将子菜单插入上级菜单。
-                );
-        /** 检查内存分配是否成功 */
-        assert(myList_2);
-        /** 将子菜单的跳转入口插入其上级菜单 */
-        MENU_ListInsert(
-                menu_menuRoot,  ///> 要插入的上级菜单。
-                MENU_ItemConstruct(
-                        menuType,   ///> 类型标识，指明这是一个菜单跳转类型的菜单项。
-                        myList_2,   ///> 数据指针，这里指向要跳转到的菜单列表。
-                        "Image", ///> 菜单项名称，在菜单列表中显示。
-                        0,          ///> 数据的保存位置，对于非数据类型填0即可。
-                        0           ///> 属性Flag，无任何属性填0。
-                ));
-        {
-            MENU_ListInsert(myList_2, MENU_ItemConstruct(
-                    variType,  ///> 类型标识，指明这是一个整数类型的菜单项
-                    &threshold,  ///> 数据指针，这里指向要操作的整数。必须是int32_t类型。
-                    "threshold",   ///> 菜单项名称，在菜单列表中显示。
-                    16,        ///> 数据的保存地址，不能重复且尽可能连续，步长为1。
-                    ///> 全局数据区0~9的地址为保留地址，不能使用。
-                    menuItem_data_global
-                    ///> 属性flag。此flag表示该变量存储于全局数据区.
-            ));
-            MENU_ListInsert(myList_2, MENU_ItemConstruct(
-                    variType,  ///> 类型标识，指明这是一个整数类型的菜单项
-                    &preview,  ///> 数据指针，这里指向要操作的整数。必须是int32_t类型。
-                    "preview",   ///> 菜单项名称，在菜单列表中显示。
-                    17,        ///> 数据的保存地址，不能重复且尽可能连续，步长为1。
-                    ///> 全局数据区0~9的地址为保留地址，不能使用。
-                    menuItem_data_global
-                    ///> 属性flag。此flag表示该变量存储于全局数据区.
-            ));
-            MENU_ListInsert(myList_2, MENU_ItemConstruct(
-                    procType,  ///> 类型标识，指明这是一个浮点类型的菜单项
-                    Cam_Test,///> 数据指针，这里指向要操作的整数。必须是float类型。
-                    "Cam_Test", ///> 菜单项名称，在菜单列表中显示。
-                    0,         ///> 数据的保存地址，不能重复且尽可能连续，步长为1。
-                    menuItem_proc_uiDisplay|menuItem_proc_runOnce
-                    ///> 属性flag。此flag表示该该程序运行一次就退出。
-            ));
-
-        }
-        menu_list_t *myList_3 = MENU_ListConstruct(
-                "RUN",     ///> 菜单标题，在菜单列表中的第一行显示，最大12字符。
-                5,             ///> 菜单列表的大小，须预留1位用于返回上一级的[back]。
-                menu_menuRoot   ///> 该菜单的上级菜单指针。注意：该指针仅用于返回上级菜单，并不会将子菜单插入上级菜单。
-        );
-        /** 检查内存分配是否成功 */
-        assert(myList_3);
-        /** 将子菜单的跳转入口插入其上级菜单 */
-        MENU_ListInsert(
-                menu_menuRoot,  ///> 要插入的上级菜单。
-                MENU_ItemConstruct(
-                        menuType,   ///> 类型标识，指明这是一个菜单跳转类型的菜单项。
-                        myList_3,   ///> 数据指针，这里指向要跳转到的菜单列表。
-                        "RUN", ///> 菜单项名称，在菜单列表中显示。
-                        0,          ///> 数据的保存位置，对于非数据类型填0即可。
-                        0           ///> 属性Flag，无任何属性填0。
-                ));
-        {
-            MENU_ListInsert(myList_3, MENU_ItemConstruct(
-                    procType,  ///> 类型标识，指明这是一个浮点类型的菜单项
-                    Update_Servo_Error,///> 数据指针，这里指向要操作的整数。必须是float类型。
-                    "GOGOGO", ///> 菜单项名称，在菜单列表中显示。
-                    0,         ///> 数据的保存地址，不能重复且尽可能连续，步长为1。
-                    menuItem_proc_uiDisplay
-                    ///> 属性flag。此flag表示该该程序运行一次就退出。
-            ));
-        }
-
 }
 
 /**

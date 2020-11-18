@@ -13,6 +13,13 @@ void CTRL_Init(void)
     assert(ctrl_spdCtrlHandle);
 }
 
+/**外部变量引用**/
+extern uint32_t threshold; //阈值
+extern uint32_t preview ;  //前瞻
+extern float img_error;
+float ctrl_motorL = 0.0f, ctrl_motorR = 0.0f;
+float ctrl_sevromid;            ///<舵机中值
+
 /**菜单项初始化**/
 void CTRL_MenuInit(menu_list_t *menuList)
 {
@@ -48,11 +55,13 @@ void CTRL_MenuInit(menu_list_t *menuList)
 
         MENU_ListInsert(ctrlMenuList, MENU_ItemConstruct(nullType, NULL, "DIR", 0, 0));
 
-        MENU_ListInsert(ctrlMenuList, MENU_ItemConstruct(varfType, &ctrl_dirPid.kp, "dir.kp", 20U,
+        MENU_ListInsert(ctrlMenuList, MENU_ItemConstruct(varfType, &ctrl_sevromid, "sevromid", 20U,
                 menuItem_data_region));
-        MENU_ListInsert(ctrlMenuList, MENU_ItemConstruct(varfType, &ctrl_dirPid.ki, "dir.ki", 21U,
+        MENU_ListInsert(ctrlMenuList, MENU_ItemConstruct(varfType, &ctrl_dirPid.kp, "dir.kp", 21U,
                 menuItem_data_region));
-        MENU_ListInsert(ctrlMenuList, MENU_ItemConstruct(varfType, &ctrl_dirPid.kd, "dir.kd", 22U,
+        MENU_ListInsert(ctrlMenuList, MENU_ItemConstruct(varfType, &ctrl_dirPid.ki, "dir.ki", 22U,
+                menuItem_data_region));
+        MENU_ListInsert(ctrlMenuList, MENU_ItemConstruct(varfType, &ctrl_dirPid.kd, "dir.kd", 23U,
                 menuItem_data_region));
         MENU_ListInsert(ctrlMenuList, MENU_ItemConstruct(varfType, &ctrl_dirPidOutput, "dir.out", 0U,
                 menuItem_data_NoSave | menuItem_data_NoLoad));
@@ -63,13 +72,11 @@ void CTRL_MenuInit(menu_list_t *menuList)
     assert(imageMenuList);
     MENU_ListInsert(menuList, MENU_ItemConstruct(menuType, imageMenuList, "Image", 0, 0));
     {
-        MENU_ListInsert(ctrlMenuList, MENU_ItemConstruct(variType, &ctrl_imgCtrlEn[0], "img.en", 0U,
-                menuItem_data_NoSave | menuItem_data_NoLoad | menuItem_dataExt_HasMinMax));
         MENU_ListInsert(imageMenuList, MENU_ItemConstruct(variType, &threshold, "threshold", 25U,
                 menuItem_data_global));
         MENU_ListInsert(imageMenuList, MENU_ItemConstruct(variType, &preview, "preview", 26U,
                 menuItem_data_global));
-        MENU_ListInsert(imageMenuList, MENU_ItemConstruct(varfType, &mid_line[preview], "cur", 0U,
+        MENU_ListInsert(imageMenuList, MENU_ItemConstruct(varfType, &img_error, "img_error", 0U,
                 menuItem_data_NoSave | menuItem_data_NoLoad));
     }
     static menu_list_t *paraMenuList =
@@ -79,14 +86,14 @@ void CTRL_MenuInit(menu_list_t *menuList)
     {
         MENU_ListInsert(paraMenuList, MENU_ItemConstruct(varfType, &ctrl_dirPidOutput, "dir.out", 0U,
                 menuItem_data_NoSave | menuItem_data_NoLoad));
-        MENU_ListInsert(paraMenuList, MENU_ItemConstruct(varfType, &mid_line[preview], "cur", 0U,
+        MENU_ListInsert(paraMenuList, MENU_ItemConstruct(varfType, &img_error, "img_error", 0U,
                 menuItem_data_NoSave | menuItem_data_NoLoad));
     }
 }
 
 
 /* ******************** 速度环 ******************** */
-/*int32_t ctrl_spdCtrlEn[3] = {0, 0, 1}; ///< 速度环使能
+int32_t ctrl_spdCtrlEn[3] = {0, 0, 1}; ///< 速度环使能
 
 float ctrl_spdSet = 0.0f; ///< 速度设置
 
@@ -103,21 +110,23 @@ float ctrl_spdPidOutput = 0.0f; ///< 速度环输出
 
 void CTRL_SpdCtrl(void *userData)
 {
-    ctrl_spdL = ((float)SCFTM_GetSpeed(ENCO_L_PERIPHERAL)) * CTRL_ENCO_SPD_COEFF;
-    SCFTM_ClearSpeed(ENCO_L_PERIPHERAL);
-    ctrl_spdR = ((float)SCFTM_GetSpeed(ENCO_R_PERIPHERAL)) * CTRL_ENCO_SPD_COEFF;
-    SCFTM_ClearSpeed(ENCO_R_PERIPHERAL);
-    ctrl_spdAvg = (ctrl_spdL + ctrl_spdR) / 2.0f;
+    //ctrl_spdL = ((float)SCFTM_GetSpeed(ENCO_L_PERIPHERAL)) * CTRL_ENCO_SPD_COEFF;
+    //SCFTM_ClearSpeed(ENCO_L_PERIPHERAL);
+    //ctrl_spdR = ((float)SCFTM_GetSpeed(ENCO_R_PERIPHERAL)) * CTRL_ENCO_SPD_COEFF;
+    //SCFTM_ClearSpeed(ENCO_R_PERIPHERAL);
+    //ctrl_spdAvg = (ctrl_spdL + ctrl_spdR) / 2.0f;
     if(1 == ctrl_spdCtrlEn[0])
     {
-        PIDCTRL_ErrUpdate(&ctrl_spdPid, ctrl_spdAvg - ctrl_spdSet);
-        ctrl_spdPidOutput = PIDCTRL_CalcPIDGain(&ctrl_spdPid);
+        //PIDCTRL_ErrUpdate(&ctrl_spdPid, ctrl_spdAvg - ctrl_spdSet);
+        //ctrl_spdPidOutput = PIDCTRL_CalcPIDGain(&ctrl_spdPid);
+        CTRL_MotorUpdate(ctrl_motorL, ctrl_motorR);
     }
     else
     {
-        ctrl_spdPidOutput = 0.0f;
+        //ctrl_spdPidOutput = 0.0f;
+        CTRL_MotorUpdate(0, 0);
     }
-}*/
+}
 
 /* *********************************************** */
 
@@ -130,26 +139,24 @@ pidCtrl_t ctrl_dirPid =
     .errCurr = 0.0f, .errIntg = 0.0f, .errDiff = 0.0f, .errPrev = 0.0f,
 };
 
-float ctrl_sevromid;            ///<舵机中值
 float ctrl_dirPidOutput = 0.0f; ///< 转向环输出
 
-void CTRL_DirCtrl(float *err)
+void CTRL_DirCtrl(void *userData)
 {
     if(1 == ctrl_dirCtrlEn[0])
     {
-        PIDCTRL_ErrUpdate(&ctrl_dirPid, (*err));
+        PIDCTRL_ErrUpdate(&ctrl_dirPid, (img_error));
         ctrl_dirPidOutput = ctrl_sevromid + PIDCTRL_CalcPIDGain(&ctrl_dirPid);
     }
     else
     {
         ctrl_dirPidOutput = ctrl_sevromid;
     }
-    SCFTM_PWM_ChangeHiRes(FTM3,kFTM_Chnl_7,50U,Servo_Output);
+    SCFTM_PWM_ChangeHiRes(FTM3,kFTM_Chnl_7,50U,ctrl_dirPidOutput);
 }
 
 /* *********************************************** */
 //速度闭环后再启用
-float ctrl_motorL = 0.0f, ctrl_motorR = 0.0f;
 
 void CTRL_MotorUpdate(float motorL, float motorR)
 {
@@ -185,26 +192,26 @@ void CTRL_MotorUpdate(float motorL, float motorR)
         motorR = 0.0f;
     }
 
-    if(ctrl_motorLQ > 0)
+    if(motorL > 0)
     {
-        SCFTM_PWM_ChangeHiRes(FTM0, kFTM_Chnl_0, 20000U, ctrl_motorL);
+        SCFTM_PWM_ChangeHiRes(FTM0, kFTM_Chnl_0, 20000U, motorL);
         SCFTM_PWM_ChangeHiRes(FTM0, kFTM_Chnl_1, 20000U, 0.0f);
     }
     else
     {
         SCFTM_PWM_ChangeHiRes(FTM0, kFTM_Chnl_0, 20000U, 0.0f);
-        SCFTM_PWM_ChangeHiRes(FTM0, kFTM_Chnl_1, 20000U, -ctrl_motorL);
+        SCFTM_PWM_ChangeHiRes(FTM0, kFTM_Chnl_1, 20000U, -motorL);
     }
 
-    if(ctrl_motorRQ > 0)
+    if(motorR > 0)
     {
-        SCFTM_PWM_ChangeHiRes(FTM0, kFTM_Chnl_2, 20000U, ctrl_motorR);
+        SCFTM_PWM_ChangeHiRes(FTM0, kFTM_Chnl_2, 20000U, motorR);
         SCFTM_PWM_ChangeHiRes(FTM0, kFTM_Chnl_3, 20000U, 0.0f);
     }
     else
     {
         SCFTM_PWM_ChangeHiRes(FTM0, kFTM_Chnl_2, 20000U, 0.0f);
-        SCFTM_PWM_ChangeHiRes(FTM0, kFTM_Chnl_3, 20000U, -ctrl_motorR);
+        SCFTM_PWM_ChangeHiRes(FTM0, kFTM_Chnl_3, 20000U, -motorR);
     }
 }
 

@@ -435,40 +435,32 @@ float image_main(void)
     /*到此处为止，我们已经得到了属于赛道的结构体数组my_road[CAMERA_H]*/
     ordinary_two_line();
     get_mid_line();
-    float Servo_err = MIDLINE - mid_line[preview];
+    float Servo_err = (float)(MIDLINE - mid_line[preview]);
     return Servo_err/10;
 }
-
-
-void Cam_Test(menu_keyOp_t *_op)
+disp_ssd1306_frameBuffer_t dispBuffer;
+graphic::bufPrint0608_t<disp_ssd1306_frameBuffer_t> bufPrinter(dispBuffer);
+void Cam_Test(void)
 {
-    //Cam_Init();
-    disp_ssd1306_frameBuffer_t *dispBuffer = new disp_ssd1306_frameBuffer_t;
-    DMADVP_TransferStart(DMADVP0, &dmadvpHandle);
-    while(true)
+    dispBuffer.Clear();
+    for (int i = 0; i < cameraCfg.imageRow; i += 2)
     {
-        while (kStatus_Success != DMADVP_TransferGetFullBuffer(DMADVP0, &dmadvpHandle, &fullBuffer));
-        dispBuffer->Clear();
-        for (int i = 0; i < cameraCfg.imageRow; i += 2)
+        int16_t imageRow = i >> 1;//除以2 为了加速;
+        int16_t dispRow = (imageRow / 8) + 1, dispShift = (imageRow % 8);
+        for (int j = 0; j < cameraCfg.imageCol; j += 2)
         {
-            int16_t imageRow = i >> 1;//除以2 为了加速;
-            int16_t dispRow = (imageRow / 8) + 1, dispShift = (imageRow % 8);
-            for (int j = 0; j < cameraCfg.imageCol; j += 2)
+            int16_t dispCol = j >> 1;
+            if (fullBuffer[i * cameraCfg.imageCol + j] > threshold)
             {
-                int16_t dispCol = j >> 1;
-                if (fullBuffer[i * cameraCfg.imageCol + j] > threshold)
-                {
-                    dispBuffer->SetPixelColor(dispCol, imageRow, 1);
-                }
-                if(dispCol == 188/4 || imageRow == 120/4)
-                {
-                    dispBuffer->SetPixelColor(dispCol, imageRow, 0);
-                }
+                dispBuffer.SetPixelColor(dispCol, imageRow, 1);
+            }
+            if(dispCol == 188/4 || imageRow == 120/4)
+            {
+                dispBuffer.SetPixelColor(dispCol, imageRow, 0);
             }
         }
-        DISP_SSD1306_BufferUpload((uint8_t*) dispBuffer);
-        DMADVP_TransferSubmitEmptyBuffer(DMADVP0, &dmadvpHandle, fullBuffer);
     }
+    DISP_SSD1306_BufferUpload((uint8_t*) &dispBuffer);
 }
 
 void Cam_Init(void)
@@ -482,22 +474,22 @@ void Cam_Init(void)
     imageBuffer1 = new uint8_t[DMADVP0->imgSize];
     DMADVP_TransferSubmitEmptyBuffer(DMADVP0, &dmadvpHandle, imageBuffer0);
     DMADVP_TransferSubmitEmptyBuffer(DMADVP0, &dmadvpHandle, imageBuffer1);
+    DMADVP_TransferStart(DMADVP0, &dmadvpHandle);
 }
 
+float img_error;
 void CAM_ZF9V034_DmaCallback(edma_handle_t *handle, void *userData, bool transferDone, uint32_t tcds)
 {
-    dmadvp_handle_t *dmadvpHandle = (dmadvp_handle_t*)userData;
+    static dmadvp_handle_t *dmadvpHandle = (dmadvp_handle_t*)userData;
     DMADVP_EdmaCallbackService(dmadvpHandle, transferDone);
-    if(kStatus_DMADVP_NoEmptyBuffer = DMADVP_TransferStart(dmadvpHandle->base, dmadvpHandle))
+    if(kStatus_DMADVP_NoEmptyBuffer == DMADVP_TransferStart(dmadvpHandle->base, dmadvpHandle))
     {
-        DMADVP_TransferSubmitEmptyBuffer(DMADVP0, &dmadvpHandle, fullBuffer);
+        DMADVP_TransferSubmitEmptyBuffer(DMADVP0, dmadvpHandle, fullBuffer);
     }
     if(transferDone)
     {
-        DMADVP_TransferGetFullBuffer(DMADVP0, &dmadvpHandle, &fullBuffer);
-        image_main();
-        DMADVP_TransferSubmitEmptyBuffer(DMADVP0, &dmadvpHandle, fullBuffer);
-        Update_Servo_Output(MIDLINE-mid_line[preview]);
-        Update_Motor_Output(0);
+        DMADVP_TransferGetFullBuffer(DMADVP0, dmadvpHandle, &fullBuffer);
+        img_error = image_main();
+        DMADVP_TransferSubmitEmptyBuffer(DMADVP0, dmadvpHandle, fullBuffer);
     }
 }
